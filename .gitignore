@@ -1,0 +1,42 @@
+# =========================
+# Rust
+# =========================
+/dist
+/target/
+**/*.rs.bk
+
+# By default ignore Cargo.lock (correct for libraries)
+Cargo.lock
+
+# But keep Cargo.lock if this is a binary crate (has src/main.rs)
+#!src/main.rs
+#!Cargo.lock
+
+# =========================
+# Android / Gradle
+# =========================
+android/.gradle/
+android/build/
+android/*/build/
+
+# Gradle local config (do not ignore wrapper!)
+android/local.properties
+
+# =========================
+# Android Studio / IntelliJ
+# =========================
+android/.idea/
+*.iml
+
+# =========================
+# JNI Generated Binaries
+# (ignore if built outputs; keep if vendored)
+# =========================
+android/ddg-url-predictor/src/main/jniLibs/
+
+# =========================
+# Misc / OS
+# =========================
+.DS_Store
+*.log
+

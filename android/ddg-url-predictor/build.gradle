@@ -1,0 +1,103 @@
+plugins {
+    id 'com.android.library'
+    id 'org.jetbrains.kotlin.android'
+    id "com.vanniktech.maven.publish"
+    id 'org.jetbrains.kotlin.plugin.serialization'
+}
+
+def getVersionName = { ->
+    def props = new Properties()
+    file("../version.properties").withInputStream { props.load(it) }
+    return props.getProperty("VERSION_NAME")
+}
+
+def buildVersionCode = {
+    def versionName = getVersionName()
+    def (major, minor, patch) = versionName.toLowerCase().tokenize('-')[0].tokenize('.')
+    (major, minor, patch) = [major, minor, patch].collect { it.toInteger() }
+    return (major * 10_000_000) + (minor * 10_000) + (patch * 1_000)
+}
+
+mavenPublishing {
+    // publishing to CentralPortal (https://repo.maven.apache.org/maven2/com/duckduckgo/urlpredictor/url-predictor-android/)
+    publishToMavenCentral()
+
+    signAllPublications()
+
+    coordinates("com.duckduckgo.urlpredictor", "url-predictor-android", "${getVersionName}")
+
+    pom {
+        name = "DDG URL Predictor"
+        description = "DuckDuckGo URL Predictor Library."
+        inceptionYear = "2023"
+        url = "https://github.com/duckduckgo/url_predictor"
+        licenses {
+            license {
+                name = "Apache License Version 2.0"
+                url = "https://github.com/duckduckgo/url_predictor/blob/main/LICENSE"
+                distribution = "https://github.com/duckduckgo/url_predictor/blob/main/LICENSE"
+            }
+        }
+        developers {
+            developer {
+                id = "duckduckgo"
+                name = "DuckDuckGo"
+                url = "https://github.com/duckduckgo/"
+            }
+        }
+        scm {
+            url = "https://github.com/duckduckgo/url_predictor"
+            connection = "scm:git:git://github.com/duckduckgo/url_predictor.git"
+            developerConnection = "scm:git:ssh://git@github.com:duckduckgo/url_predictor.git"
+        }
+    }
+}
+
+android {
+    compileSdk 35
+
+    namespace "com.duckduckgo.urlpredictor"
+
+    defaultConfig {
+        minSdk 23
+        targetSdk 35
+        versionCode buildVersionCode()
+        versionName getVersionName()
+        project.archivesBaseName = "ddg-url-predictor-android${getVersionName}"
+        setProperty("archivesBaseName", "${archivesBaseName}")
+
+        testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+        }
+    }
+
+    sourceSets {
+        main {
+            jniLibs.srcDirs = ['src/main/jniLibs']
+        }
+    }
+
+    buildFeatures {
+        prefab true
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_1_8
+        targetCompatibility JavaVersion.VERSION_1_8
+    }
+
+    kotlinOptions {
+        jvmTarget = '1.8'
+    }
+}
+
+dependencies {
+    implementation platform("org.jetbrains.kotlin:kotlin-bom:1.9.24")
+    implementation "org.jetbrains.kotlin:kotlin-stdlib"         // version via BOM
+    implementation "org.jetbrains.kotlinx:kotlinx-serialization-json:1.6.3"
+}
