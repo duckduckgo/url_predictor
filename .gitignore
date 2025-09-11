@@ -40,3 +40,7 @@ android/ddg-url-predictor/src/main/jniLibs/
 .DS_Store
 *.log
 
+# =========================
+# Apple / Swift
+# =========================
+.build

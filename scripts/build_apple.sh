@@ -4,7 +4,7 @@ set -euo pipefail
 CRATE_NAME="url_predictor"
 FEATURES="${FEATURES:-real-psl}"
 
-NAME=URLPredictor                     # Framework & Swift module name
+NAME=URLPredictorRust                    # Framework & Swift module name
 CRATE_LIB=liburl_predictor.dylib      # Rust cdylib filename
 MIN_MACOS=11.3
 MIN_IOS=15.0
@@ -27,7 +27,7 @@ mkdir -p "$INCLUDE_DIR"
 if ! command -v cbindgen >/dev/null 2>&1; then cargo install cbindgen; fi
 cbindgen --config cbindgen.toml --crate ${CRATE_NAME} --output "${INCLUDE_DIR}/ddg_url_predictor.h"
 cat > "${INCLUDE_DIR}/module.modulemap" <<-EOF
-module URLPredictor {
+framework module URLPredictorRust {
   umbrella header "ddg_url_predictor.h"
   export *
 }

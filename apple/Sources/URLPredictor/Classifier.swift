@@ -1,4 +1,23 @@
+//
+//  Classifier.swift
+//
+//  Copyright © 2025 DuckDuckGo. All rights reserved.
+//
+//  Licensed under the Apache License, Version 2.0 (the "License");
+//  you may not use this file except in compliance with the License.
+//  You may obtain a copy of the License at
+//
+//  http://www.apache.org/licenses/LICENSE-2.0
+//
+//  Unless required by applicable law or agreed to in writing, software
+//  distributed under the License is distributed on an "AS IS" BASIS,
+//  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+//  See the License for the specific language governing permissions and
+//  limitations under the License.
+//
+
 import Foundation
+import URLPredictorRust
 
 // C symbols are assumed imported via modulemap/bridging header:
 // char *ddg_up_classify_json(const char *input, const char *policy_json);
@@ -28,40 +47,6 @@ public enum Classifier {
         case search(query: String)
     }
 
-    // Codable for the externally tagged enum:
-    // {"Navigate":{"url":"..."}}  or  {"Search":{"query":"..."}}
-    // We only need Decodable, but Encodable provided for symmetry.
-    extension Decision: Codable {
-        public init(from decoder: Decoder) throws {
-            // Try decoding as { "Navigate": { "url": "..." } } or { "Search": { "query": "..." } }
-            let container = try decoder.singleValueContainer()
-            let raw = try container.decode([String: [String: String]].self)
-
-            if let nav = raw["Navigate"], let urlStr = nav["url"], let url = URL(string: urlStr) {
-                self = .navigate(url: url)
-                return
-            }
-            if let sea = raw["Search"], let query = sea["query"] {
-                self = .search(query: query)
-                return
-            }
-            throw DecodingError.dataCorruptedError(
-                in: container,
-                debugDescription: "Unexpected decision shape: \(raw)"
-            )
-        }
-
-        public func encode(to encoder: Encoder) throws {
-            var container = encoder.singleValueContainer()
-            switch self {
-            case .navigate(let url):
-                try container.encode(["Navigate": ["url": url.absoluteString]])
-            case .search(let query):
-                try container.encode(["Search": ["query": query]])
-            }
-        }
-    }
-
     // MARK: - Errors
     public enum Error: Swift.Error {
         case policyEncodingFailed
@@ -71,7 +56,7 @@ public enum Classifier {
     }
 
     // MARK: - Core native call → raw JSON
-    static func classifyRawJSON(input: String, policy: Policy) throws -> String {
+    static func classifyRawJSON(input: String, policy: Policy?) throws -> String {
         // Encode policy with snake_case to match Rust field names.
         let encoder = JSONEncoder()
         encoder.keyEncodingStrategy = .convertToSnakeCase
@@ -99,7 +84,7 @@ public enum Classifier {
     // MARK: - Typed helpers
 
     /// Decode the result into the `Decision` enum.
-    public static func classify(input: String, policy: Policy) throws -> Decision {
+    public static func classify(input: String, policy: Policy? = nil) throws -> Decision {
         let json = try classifyRawJSON(input: input, policy: policy)
         let decoder = JSONDecoder()
         // No special key strategy: enum tags are "Navigate"/"Search" and fields are "url"/"query".
@@ -110,3 +95,38 @@ public enum Classifier {
         }
     }
 }
+
+// Codable for the externally tagged enum:
+// {"Navigate":{"url":"..."}}  or  {"Search":{"query":"..."}}
+// We only need Decodable, but Encodable provided for symmetry.
+extension Classifier.Decision: Codable {
+    public init(from decoder: Decoder) throws {
+        // Try decoding as { "Navigate": { "url": "..." } } or { "Search": { "query": "..." } }
+        let container = try decoder.singleValueContainer()
+        let raw = try container.decode([String: [String: String]].self)
+
+        if let nav = raw["Navigate"], let urlStr = nav["url"], let url = URL(string: urlStr) {
+            self = .navigate(url: url)
+            return
+        }
+        if let sea = raw["Search"], let query = sea["query"] {
+            self = .search(query: query)
+            return
+        }
+        throw DecodingError.dataCorruptedError(
+            in: container,
+            debugDescription: "Unexpected decision shape: \(raw)"
+        )
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.singleValueContainer()
+        switch self {
+        case .navigate(let url):
+            try container.encode(["Navigate": ["url": url.absoluteString]])
+        case .search(let query):
+            try container.encode(["Search": ["query": query]])
+        }
+    }
+}
+
