@@ -45,6 +45,24 @@ public enum Classifier {
     public enum Decision: Equatable, Sendable {
         case navigate(url: URL)
         case search(query: String)
+
+        public var url: URL? {
+            switch self {
+            case .navigate(let url):
+                return url
+            case .search:
+                return nil
+            }
+        }
+
+        public var query: String? {
+            switch self {
+            case .navigate:
+                return nil
+            case .search(let query):
+                return query
+            }
+        }
     }
 
     // MARK: - Errors
