@@ -263,9 +263,19 @@ fn classify_host_like(input: &str, policy: &Policy, db: &dyn SuffixDb) -> Option
     }
 
     let has_dot = ascii_host.contains('.');
+    let has_username = !u.username().is_empty();
     let has_port = u.port().is_some();
     let has_path = !u.path().is_empty() && u.path() != "/";
     let ends_with_slash = input.ends_with('/');
+
+    if has_username {
+        let has_password = !u.password().unwrap_or("").is_empty();
+        let has_fragment = !u.fragment().unwrap_or("").is_empty();
+
+        if !has_password && !has_path && !has_port && !has_fragment {
+            return None;
+        }
+    }
 
     if has_dot && db.has_known_suffix(&ascii_host, policy.allow_private_suffix) {
         return Some(Decision::Navigate { url: u.to_string() });
@@ -616,11 +626,11 @@ mod tests {
         assert!(matches!(classify("1+(3+4*2)", &p), Decision::Search { query } if query == "1+(3+4*2)"));
         assert!(matches!(classify("localdomain", &p), Decision::Search { query } if query == "localdomain"));
         assert!(matches!(classify("1.4/3.4", &p), Decision::Search { query } if query == "1.4/3.4"));
+        assert!(matches!(classify("user@domain.com", &p), Decision::Search { query } if query == "user@domain.com")); // query user@domain.com on macOS
 
         // different from macOS
         assert!(matches!(classify("test://hello/", &p), Decision::Search { query } if query == "test://hello/")); // navigate on macOS
         assert!(matches!(classify("http://user:@domain.com", &p), Decision::Navigate { url } if url == "http://user@domain.com/")); // http://user:@domain.com on macOS
-        assert!(matches!(classify("user@domain.com", &p), Decision::Navigate { url } if url == "http://user@domain.com/")); // query user@domain.com on macOS
     }
 
     #[test]
@@ -652,7 +662,7 @@ mod tests {
         assert!(matches!(classify("https://user:::@domain.com", &p), Decision::Navigate { url } if url == "https://user:%3A%3A@domain.com/"));
 
         // different from Windows
-        assert!(matches!(classify("user@domain.com", &p), Decision::Navigate { url } if url == "http://user@domain.com/")); // query user@domain.com on Windows
+        assert!(matches!(classify("user@domain.com", &p), Decision::Search { query } if query == "user@domain.com"));
     }
 
     // ---------------------------
