@@ -93,6 +93,40 @@ struct ClassifierTests {
         #expect(decision == expectation, sourceLocation: .init(fileID: #fileID, filePath: #filePath, line: Int(line), column: 1))
     }
 
+    static let windows_tests_args: [(String, Classifier.Decision, Int)] = [
+        ("apple.com/mac/", .navigate(url: URL(string: "http://apple.com/mac/")!), #line),
+        ("duckduckgo.com", .navigate(url: URL(string: "http://duckduckgo.com/")!), #line),
+        ("duckduckgo", .search(query: "duckduckgo"), #line),
+        ("www.duckduckgo.com", .navigate(url: URL(string: "http://www.duckduckgo.com/")!), #line),
+        ("http://www.duckduckgo.com", .navigate(url: URL(string: "http://www.duckduckgo.com/")!), #line),
+        ("https://www.duckduckgo.com", .navigate(url: URL(string: "https://www.duckduckgo.com/")!), #line),
+        ("127.0.0.1", .navigate(url: URL(string: "http://127.0.0.1/")!), #line),
+        ("http://127.0.0.1", .navigate(url: URL(string: "http://127.0.0.1/")!), #line),
+        ("stuff.stor", .search(query: "stuff.stor"), #line),
+        ("https://stuff.stor", .navigate(url: URL(string: "https://stuff.stor/")!), #line),
+        ("stuff.store", .navigate(url: URL(string: "http://stuff.store/")!), #line),
+        ("windows.applicationmodel.store.dll", .search(query: "windows.applicationmodel.store.dll"), #line),
+        ("1.2.7", .search(query: "1.2.7"), #line),
+        ("http://1.2.7", .navigate(url: URL(string: "http://1.2.0.7/")!), #line),
+        ("1.2", .search(query: "1.2"), #line),
+        ("user:pass@domain.com", .navigate(url: URL(string: "http://user:pass@domain.com/")!), #line),
+        ("user: @domain.com", .search(query: "user: @domain.com"), #line),
+        ("user:,,@domain.com", .navigate(url: URL(string: "http://user:,,@domain.com/")!), #line),
+        ("user:::@domain.com", .navigate(url: URL(string: "http://user:%3A%3A@domain.com/")!), #line),
+        ("https://user@domain.com", .navigate(url: URL(string: "https://user@domain.com/")!), #line),
+        ("https://user:pass@domain.com", .navigate(url: URL(string: "https://user:pass@domain.com/")!), #line),
+        ("https://user: @domain.com", .navigate(url: URL(string: "https://user: @domain.com/")!), #line),
+        ("https://user:,,@domain.com", .navigate(url: URL(string: "https://user:,,@domain.com/")!), #line),
+        ("https://user:::@domain.com", .navigate(url: URL(string: "https://user:%3A%3A@domain.com/")!), #line),
+        // failing tests:
+//        ("user@domain.com", .search(query: "user@domain.com"), #line),
+    ]
+    @Test("Creating URLs from address bar strings - Windows tests", arguments: windows_tests_args)
+    func makeURL_from_addressBarString_windowsTests(string: String, expectation: Classifier.Decision, line: Int) throws {
+        let decision = try Classifier.classify(input: string)
+        #expect(decision == expectation, sourceLocation: .init(fileID: #fileID, filePath: #filePath, line: Int(line), column: 1))
+    }
+
     static let whenOneSlashIsMissingAfterHypertextScheme_ThenItShouldBeAdded_args: [(String, Classifier.Decision, Int)] = [
         ("http:/duckduckgo.com", .navigate(url: URL(string: "http://duckduckgo.com/")!), #line),
         ("http://duckduckgo.com", .navigate(url: URL(string: "http://duckduckgo.com/")!), #line),
