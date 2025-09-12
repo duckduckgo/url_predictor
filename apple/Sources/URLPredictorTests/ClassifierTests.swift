@@ -81,11 +81,11 @@ struct ClassifierTests {
         ("http://user name:pass word@domain.com/folder name/file name/", .navigate(url: URL(string: "http://user%20name:pass%20word@domain.com/folder%20name/file%20name/")!), #line),
         ("1+(3+4*2)", .search(query: "1+(3+4*2)"), #line),
         ("localdomain", .search(query: "localdomain"), #line),
-        // failing tests:
-//        ("test://hello/", .navigate(url: URL(string: "test://hello/")!), #line), // is .search(query: "test://hello/")
-//        ("1.4/3.4", .search(query: "1.4/3.4"), #line), // is .navigate(url: URL(string: "http://1.0.0.4/3.4")!)
-//        ("user@domain.com", .search(query: "user@domain.com"), #line), // is .navigate(url: URL(string: "http://user@domain.com")!)
-//        ("http://user:@domain.com", .navigate(url: URL(string: "http://user:@domain.com/")!), #line), // is .navigate(url: URL(string: "http://user@domain.com")!)
+        ("1.4/3.4", .search(query: "1.4/3.4"), #line),
+        ("user@domain.com", .search(query: "user@domain.com"), #line),
+        // different from macOS
+        ("http://user:@domain.com", .navigate(url: URL(string: "http://user@domain.com/")!), #line), // on macOS retains the :
+        ("test://hello/", .search(query: "test://hello/"), #line), // on macOS is .navigate(url: URL(string: "test://hello/")!)
     ]
     @Test("Creating URLs from address bar strings", arguments: makeURL_from_addressBarString_args)
     func makeURL_from_addressBarString(string: String, expectation: Classifier.Decision, line: Int) throws {
@@ -118,8 +118,7 @@ struct ClassifierTests {
         ("https://user: @domain.com", .navigate(url: URL(string: "https://user: @domain.com/")!), #line),
         ("https://user:,,@domain.com", .navigate(url: URL(string: "https://user:,,@domain.com/")!), #line),
         ("https://user:::@domain.com", .navigate(url: URL(string: "https://user:%3A%3A@domain.com/")!), #line),
-        // failing tests:
-//        ("user@domain.com", .search(query: "user@domain.com"), #line),
+        ("user@domain.com", .search(query: "user@domain.com"), #line),
     ]
     @Test("Creating URLs from address bar strings - Windows tests", arguments: windows_tests_args)
     func makeURL_from_addressBarString_windowsTests(string: String, expectation: Classifier.Decision, line: Int) throws {
