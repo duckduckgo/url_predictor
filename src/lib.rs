@@ -10,6 +10,7 @@
 use std::collections::{BTreeSet, HashSet};
 use std::ffi::{CStr, CString};
 use std::os::raw::c_char;
+use std::net::Ipv4Addr;
 
 use idna::domain_to_ascii;
 use once_cell::sync::Lazy;
@@ -251,6 +252,14 @@ fn classify_host_like(input: &str, policy: &Policy, db: &dyn SuffixDb) -> Option
 
     if !host_like_valid(&ascii_host) {
         return None;
+    }
+
+    let is_ipv4 = ascii_host.parse::<Ipv4Addr>().is_ok();
+    if is_ipv4 {
+        let raw_host = input.split('/').next().unwrap_or(input);
+        if !raw_host.parse::<Ipv4Addr>().is_ok() {
+            return None;
+        }
     }
 
     let has_dot = ascii_host.contains('.');
@@ -606,11 +615,11 @@ mod tests {
         assert!(matches!(classify("http://user name:pass word@domain.com/folder name/file name/", &p), Decision::Navigate { url } if url == "http://user%20name:pass%20word@domain.com/folder%20name/file%20name/"));
         assert!(matches!(classify("1+(3+4*2)", &p), Decision::Search { query } if query == "1+(3+4*2)"));
         assert!(matches!(classify("localdomain", &p), Decision::Search { query } if query == "localdomain"));
+        assert!(matches!(classify("1.4/3.4", &p), Decision::Search { query } if query == "1.4/3.4"));
 
         // different from macOS
         assert!(matches!(classify("test://hello/", &p), Decision::Search { query } if query == "test://hello/")); // navigate on macOS
         assert!(matches!(classify("http://user:@domain.com", &p), Decision::Navigate { url } if url == "http://user@domain.com/")); // http://user:@domain.com on macOS
-        assert!(matches!(classify("1.4/3.4", &p), Decision::Navigate { url } if url == "http://1.0.0.4/3.4")); // query 1.4/3.4 on macOS
         assert!(matches!(classify("user@domain.com", &p), Decision::Navigate { url } if url == "http://user@domain.com/")); // query user@domain.com on macOS
     }
 
