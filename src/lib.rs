@@ -566,6 +566,86 @@ mod tests {
         assert!(matches!(classify("exa_mple.com", &p), Decision::Search { .. }));
     }
 
+    #[test]
+    fn macos_specific() {
+        let p = Policy::default();
+        assert!(matches!(classify("regular-domain.com/path/to/directory/", &p), Decision::Navigate { url } if url == "http://regular-domain.com/path/to/directory/"));
+        assert!(matches!(classify("regular-domain.com/path/to/directory/", &p), Decision::Navigate { url } if url == "http://regular-domain.com/path/to/directory/"));
+        assert!(matches!(classify("regular-domain.com", &p), Decision::Navigate { url } if url == "http://regular-domain.com/"));
+        assert!(matches!(classify("regular-domain.com/", &p), Decision::Navigate { url } if url == "http://regular-domain.com/"));
+        assert!(matches!(classify("regular-domain.com/filename", &p), Decision::Navigate { url } if url == "http://regular-domain.com/filename"));
+        assert!(matches!(classify("regular-domain.com/filename?a=b&b=c", &p), Decision::Navigate { url } if url == "http://regular-domain.com/filename?a=b&b=c"));
+        assert!(matches!(classify("regular-domain.com/filename/?a=b&b=c", &p), Decision::Navigate { url } if url == "http://regular-domain.com/filename/?a=b&b=c"));
+        assert!(matches!(classify("http://regular-domain.com?a=b&b=c", &p), Decision::Navigate { url } if url == "http://regular-domain.com/?a=b&b=c"));
+        assert!(matches!(classify("http://regular-domain.com/?a=b&b=c", &p), Decision::Navigate { url } if url == "http://regular-domain.com/?a=b&b=c"));
+        assert!(matches!(classify("https://hexfiend.com/file?q=a", &p), Decision::Navigate { url } if url == "https://hexfiend.com/file?q=a"));
+        assert!(matches!(classify("https://hexfiend.com/file/?q=a", &p), Decision::Navigate { url } if url == "https://hexfiend.com/file/?q=a"));
+        assert!(matches!(classify("https://hexfiend.com/?q=a", &p), Decision::Navigate { url } if url == "https://hexfiend.com/?q=a"));
+        assert!(matches!(classify("https://hexfiend.com?q=a", &p), Decision::Navigate { url } if url == "https://hexfiend.com/?q=a"));
+        assert!(matches!(classify("regular-domain.com/path/to/file ", &p), Decision::Navigate { url } if url == "http://regular-domain.com/path/to/file"));
+        assert!(matches!(classify("search string with spaces", &p), Decision::Search { query } if query == "search string with spaces"));
+        assert!(matches!(classify("https://duckduckgo.com/?q=search string with spaces&arg 2=val 2", &p), Decision::Navigate { url } if url == "https://duckduckgo.com/?q=search%20string%20with%20spaces&arg%202=val%202"));
+        assert!(matches!(classify("https://duckduckgo.com/?q=search+string+with+spaces", &p), Decision::Navigate { url } if url == "https://duckduckgo.com/?q=search+string+with+spaces"));
+        assert!(matches!(classify("https://screwjankgames.github.io/engine programming/2020/09/24/writing-your.html", &p), Decision::Navigate { url } if url == "https://screwjankgames.github.io/engine%20programming/2020/09/24/writing-your.html"));
+        assert!(matches!(classify("define: foo", &p), Decision::Search { query } if query == "define: foo"));
+        assert!(matches!(classify("   http://example.com\n", &p), Decision::Navigate { url } if url == "http://example.com/"));
+        assert!(matches!(classify(" duckduckgo.com", &p), Decision::Navigate { url } if url == "http://duckduckgo.com/"));
+        assert!(matches!(classify(" duck duck go.c ", &p), Decision::Search { query } if query == "duck duck go.c"));
+        assert!(matches!(classify("localhost ", &p), Decision::Navigate { url } if url == "http://localhost/"));
+        assert!(matches!(classify("local ", &p), Decision::Search { query } if query == "local"));
+        assert!(matches!(classify("test string with spaces", &p), Decision::Search { query } if query == "test string with spaces"));
+        assert!(matches!(classify("http://💩.la:8080 ", &p), Decision::Navigate { url } if url == "http://xn--ls8h.la:8080/"));
+        assert!(matches!(classify("http:// 💩.la:8080 ", &p), Decision::Search { query } if query == "http:// 💩.la:8080"));
+        assert!(matches!(classify("https://xn--ls8h.la/path/to/resource", &p), Decision::Navigate { url } if url == "https://xn--ls8h.la/path/to/resource"));
+        assert!(matches!(classify("16385-12228.72", &p), Decision::Search { query } if query == "16385-12228.72"));
+        assert!(matches!(classify("user@localhost", &p), Decision::Search { query } if query == "user@localhost"));
+        assert!(matches!(classify("http://user@domain.com", &p), Decision::Navigate { url } if url == "http://user@domain.com/"));
+        assert!(matches!(classify("http://user: @domain.com", &p), Decision::Navigate { url } if url == "http://user:%20@domain.com/"));
+        assert!(matches!(classify("http://user:,,@domain.com", &p), Decision::Navigate { url } if url == "http://user:,,@domain.com/"));
+        assert!(matches!(classify("http://user:pass@domain.com", &p), Decision::Navigate { url } if url == "http://user:pass@domain.com/"));
+        assert!(matches!(classify("http://user name:pass word@domain.com/folder name/file name/", &p), Decision::Navigate { url } if url == "http://user%20name:pass%20word@domain.com/folder%20name/file%20name/"));
+        assert!(matches!(classify("1+(3+4*2)", &p), Decision::Search { query } if query == "1+(3+4*2)"));
+        assert!(matches!(classify("localdomain", &p), Decision::Search { query } if query == "localdomain"));
+
+        // different from macOS
+        assert!(matches!(classify("test://hello/", &p), Decision::Search { query } if query == "test://hello/")); // navigate on macOS
+        assert!(matches!(classify("http://user:@domain.com", &p), Decision::Navigate { url } if url == "http://user@domain.com/")); // http://user:@domain.com on macOS
+        assert!(matches!(classify("1.4/3.4", &p), Decision::Navigate { url } if url == "http://1.0.0.4/3.4")); // query 1.4/3.4 on macOS
+        assert!(matches!(classify("user@domain.com", &p), Decision::Navigate { url } if url == "http://user@domain.com/")); // query user@domain.com on macOS
+    }
+
+    #[test]
+    fn windows_specific() {
+        let p = Policy::default();
+        assert!(matches!(classify("apple.com/mac/", &p), Decision::Navigate { url } if url == "http://apple.com/mac/"));
+        assert!(matches!(classify("duckduckgo.com", &p), Decision::Navigate { url } if url == "http://duckduckgo.com/"));
+        assert!(matches!(classify("duckduckgo", &p), Decision::Search { query } if query == "duckduckgo"));
+        assert!(matches!(classify("www.duckduckgo.com", &p), Decision::Navigate { url } if url == "http://www.duckduckgo.com/"));
+        assert!(matches!(classify("http://www.duckduckgo.com", &p), Decision::Navigate { url } if url == "http://www.duckduckgo.com/"));
+        assert!(matches!(classify("https://www.duckduckgo.com", &p), Decision::Navigate { url } if url == "https://www.duckduckgo.com/"));
+        assert!(matches!(classify("127.0.0.1", &p), Decision::Navigate { url } if url == "http://127.0.0.1/"));
+        assert!(matches!(classify("http://127.0.0.1", &p), Decision::Navigate { url } if url == "http://127.0.0.1/"));
+        assert!(matches!(classify("stuff.stor", &p), Decision::Search { query } if query == "stuff.stor"));
+        assert!(matches!(classify("https://stuff.or", &p), Decision::Navigate { url } if url == "https://stuff.or/"));
+        assert!(matches!(classify("stuff.org", &p), Decision::Navigate { url } if url == "http://stuff.org/"));
+        assert!(matches!(classify("windows.applicationmodel.store.dll", &p), Decision::Search { query } if query == "windows.applicationmodel.store.dll"));
+        assert!(matches!(classify("1.2.7", &p), Decision::Search { query } if query == "1.2.7"));
+        assert!(matches!(classify("http://1.2.7", &p), Decision::Navigate { url } if url == "http://1.2.0.7/"));
+        assert!(matches!(classify("1.2", &p), Decision::Search { query } if query == "1.2"));
+        assert!(matches!(classify("user:pass@domain.com", &p), Decision::Navigate { url } if url == "http://user:pass@domain.com/"));
+        assert!(matches!(classify("user: @domain.com", &p), Decision::Search { query } if query == "user: @domain.com"));
+        assert!(matches!(classify("user:,,@domain.com", &p), Decision::Navigate { url } if url == "http://user:,,@domain.com/"));
+        assert!(matches!(classify("user:::@domain.com", &p), Decision::Navigate { url } if url == "http://user:%3A%3A@domain.com/"));
+        assert!(matches!(classify("https://user@domain.com", &p), Decision::Navigate { url } if url == "https://user@domain.com/"));
+        assert!(matches!(classify("https://user:pass@domain.com", &p), Decision::Navigate { url } if url == "https://user:pass@domain.com/"));
+        assert!(matches!(classify("https://user: @domain.com", &p), Decision::Navigate { url } if url == "https://user:%20@domain.com/"));
+        assert!(matches!(classify("https://user:,,@domain.com", &p), Decision::Navigate { url } if url == "https://user:,,@domain.com/"));
+        assert!(matches!(classify("https://user:::@domain.com", &p), Decision::Navigate { url } if url == "https://user:%3A%3A@domain.com/"));
+
+        // different from Windows
+        assert!(matches!(classify("user@domain.com", &p), Decision::Navigate { url } if url == "http://user@domain.com/")); // query user@domain.com on Windows
+    }
+
     // ---------------------------
     // PSL wildcard/exception tests (real-psl only)
     // ---------------------------
