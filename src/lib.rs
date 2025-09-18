@@ -93,6 +93,7 @@ pub enum Decision {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Policy {
+    pub allow_intranet_multi_label: bool,
     pub allow_intranet_single_label: bool,
     pub allow_private_suffix: bool,
     pub allowed_schemes: BTreeSet<String>,
@@ -105,6 +106,7 @@ impl Default for Policy {
             allowed.insert(s.to_string());
         }
         Self {
+            allow_intranet_multi_label: false,
             allow_intranet_single_label: false,
             allow_private_suffix: true,
             allowed_schemes: allowed,
@@ -269,19 +271,27 @@ fn classify_host_like(input: &str, policy: &Policy, db: &dyn SuffixDb) -> Option
     let has_username = !u.username().is_empty();
     let has_port = u.port().is_some();
     let has_path = !u.path().is_empty() && u.path() != "/";
+    let has_fragment = !u.fragment().unwrap_or("").is_empty();
     let ends_with_slash = input.ends_with('/');
 
     if has_username {
         let has_password = !u.password().unwrap_or("").is_empty();
-        let has_fragment = !u.fragment().unwrap_or("").is_empty();
 
         if !has_password && !has_path && !has_port && !has_fragment {
             return None;
         }
     }
 
-    if has_dot && db.has_known_suffix(&ascii_host, policy.allow_private_suffix) {
-        return Some(Decision::Navigate { url: u.to_string() });
+    if has_dot {
+        if policy.allow_intranet_multi_label && !has_path && !has_fragment {
+            let has_query = !u.query().unwrap_or("").is_empty();
+            if !has_query {
+                return Some(Decision::Navigate { url: u.to_string() });
+            }
+        }
+        if db.has_known_suffix(&ascii_host, policy.allow_private_suffix) {
+            return Some(Decision::Navigate { url: u.to_string() });
+        }
     }
 
     if ascii_host.starts_with("www.") {
@@ -550,7 +560,7 @@ mod tests {
     }
 
     #[test]
-    fn intranet_policy() {
+    fn intranet_single_label_policy() {
         let mut p = policy_default_inet();
         p.allow_intranet_single_label = false;
         assert!(matches!(classify("dev", &p), Decision::Search { .. }));
@@ -562,6 +572,16 @@ mod tests {
             classify("dev:5173", &p),
             Decision::Navigate { .. }
         ));
+    }
+
+    #[test]
+    fn intranet_multi_label_policy() {
+        let mut p = Policy::default();
+        p.allow_intranet_multi_label = true;
+        assert!(matches!(classify("nas.local", &p), Decision::Navigate { url } if url == "http://nas.local/"));
+        assert!(matches!(classify("nas.local:5000", &p), Decision::Navigate { url } if url == "http://nas.local:5000/"));
+        assert!(matches!(classify("nas.local/login", &p), Decision::Navigate { url } if url == "http://nas.local/login"));
+        assert!(matches!(classify("package.json", &p), Decision::Navigate { url } if url == "http://package.json/"));
     }
 
     #[test]
