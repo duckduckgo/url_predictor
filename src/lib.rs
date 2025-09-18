@@ -549,6 +549,24 @@ mod tests {
     }
 
     #[test]
+    fn search_bias_with_allow_intranet_multi_label() {
+        let mut p = policy_default_inet();
+        p.allow_intranet_multi_label = true;
+        assert!(matches!(
+            classify("node.js tutorial", &p),
+            Decision::Search { .. }
+        ));
+        assert!(matches!(
+            classify("what.is my ip", &p),
+            Decision::Search { .. }
+        ));
+        assert!(matches!(
+            classify("something.orother", &p),
+            Decision::Navigate { .. }
+        ));
+    }
+
+    #[test]
     fn psl_driven() {
         let mut p = policy_default_inet();
         p.allow_intranet_single_label = false;
