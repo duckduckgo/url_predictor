@@ -31,6 +31,7 @@ object DecisionJson {
 
     @Serializable
     data class Policy(
+        val allow_intranet_multi_label: Boolean = false,
         val allow_intranet_single_label: Boolean = false,
         val allow_private_suffix: Boolean = true,
         val allowed_schemes: Set<String> = setOf(
