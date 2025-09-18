@@ -17,4 +17,4 @@ jobs:
       - name: Run unit tests
         env:
           CARGO_TERM_COLOR: always
-        run: cargo test
+        run: cargo test --features real-psl

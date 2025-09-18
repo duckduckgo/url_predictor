@@ -66,6 +66,9 @@ mod real_psl {
                             .unwrap_or_default()
                             .to_ascii_lowercase();
                         matches!(sfx_name.as_str(), "test")
+                            | matches!(sfx_name.as_str(), "example")
+                            | matches!(sfx_name.as_str(), "local")
+                            | matches!(sfx_name.as_str(), "localhost")
                     }
                     Some(SuffixType::Private) => allow_private,
                     Some(_) => true,
@@ -738,6 +741,18 @@ mod tests {
         p.allow_private_suffix = false;
         assert!(matches!(classify("foo.github.io", &p), Decision::Search { .. }),
             "when private suffixes are disallowed, treat as Search");
+    }
+
+    #[cfg(feature = "real-psl")]
+    #[test]
+    fn psl_rfc_reserved_internal_domains() {
+        // RFC 6761 reserves some domains for internal use
+        // These should be treated as known suffixes
+        let p = Policy::default();
+        assert!(matches!(classify("foo.test", &p), Decision::Navigate { .. }));
+        assert!(matches!(classify("foo.example", &p), Decision::Navigate { .. }));
+        assert!(matches!(classify("foo.local", &p), Decision::Navigate { .. }));
+        assert!(matches!(classify("foo.localhost", &p), Decision::Navigate { .. }));
     }
 
 }
