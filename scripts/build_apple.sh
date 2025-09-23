@@ -11,6 +11,11 @@ MIN_IOS=15.0
 
 DIST_DIR="dist/apple"
 
+# Versions and identifiers
+# Read library version from Cargo.toml and allow overriding bundle identifier via env
+VERSION="$(grep -m1 '^version\s*=\s*\"' Cargo.toml | sed -E 's/.*\"([^\"]+)\".*/\1/')"
+BUNDLE_ID="${BUNDLE_ID:-com.duckduckgo.URLPredictorRust}"
+
 # Ensure targets
 rustup target add aarch64-apple-darwin x86_64-apple-darwin aarch64-apple-ios aarch64-apple-ios-sim x86_64-apple-ios
 
@@ -32,6 +37,62 @@ framework module URLPredictorRust {
   export *
 }
 EOF
+
+# Helper to write Info.plist into a framework bundle
+write_info_plist () {
+  local framework_dir="$1"   # e.g., dist/apple/ios-arm64/URLPredictorRust.framework
+  local platform="$2"        # macos | ios | iossim
+  local min_version
+  if [[ "$platform" == "macos" ]]; then
+    min_version="$MIN_MACOS"
+  else
+    min_version="$MIN_IOS"
+  fi
+
+  cat > "${framework_dir}/Info.plist" <<EOF
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>CFBundleName</key>
+  <string>${NAME}</string>
+  <key>CFBundleIdentifier</key>
+  <string>${BUNDLE_ID}</string>
+  <key>CFBundleExecutable</key>
+  <string>${NAME}</string>
+  <key>CFBundleShortVersionString</key>
+  <string>${VERSION}</string>
+  <key>CFBundleVersion</key>
+  <string>${VERSION}</string>
+  <key>CFBundlePackageType</key>
+  <string>FMWK</string>
+  <key>MinimumOSVersion</key>
+  <string>${min_version}</string>
+</dict>
+</plist>
+EOF
+}
+
+# Helper to write a minimal PrivacyInfo.xcprivacy manifest
+write_privacy_manifest () {
+  local framework_dir="$1"
+  cat > "${framework_dir}/PrivacyInfo.xcprivacy" <<EOF
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>NSPrivacyTracking</key>
+  <false/>
+  <key>NSPrivacyTrackingDomains</key>
+  <array/>
+  <key>NSPrivacyCollectedDataTypes</key>
+  <array/>
+  <key>NSPrivacyAccessedAPITypes</key>
+  <array/>
+</dict>
+</plist>
+EOF
+}
 
 # Helper to assemble a .framework bundle
 make_framework () {
@@ -59,6 +120,10 @@ make_framework () {
   # Headers + module map
   cp "${INCLUDE_DIR}/ddg_url_predictor.h" "$outdir/${NAME}.framework/Headers/"
   cp "${INCLUDE_DIR}/module.modulemap" "$outdir/${NAME}.framework/Modules/"
+
+  # Metadata: Info.plist and PrivacyInfo.xcprivacy
+  write_info_plist "$outdir/${NAME}.framework" "$platform"
+  write_privacy_manifest "$outdir/${NAME}.framework"
 
   echo "${outdir}/${NAME}.framework"
 }
