@@ -108,24 +108,56 @@ make_framework () {
   [[ -f "$dylib" ]] || { echo "Missing $dylib"; exit 1; }
 
   rm -rf "${outdir}/${NAME}.framework"
-  mkdir -p "${outdir}/${NAME}.framework/Headers"
-  mkdir -p "${outdir}/${NAME}.framework/Modules"
 
-  # Binary inside framework MUST be named like the framework (no 'lib' prefix)
-  cp "$dylib" "$outdir/${NAME}.framework/${NAME}"
+  # macOS: build a versioned framework bundle
+  if [[ "$platform" == "macos" ]]; then
+    local framework_dir="${outdir}/${NAME}.framework"
+    local versions_dir="${framework_dir}/Versions"
+    local current_ver_dir="${versions_dir}/A"
 
-  # If you didn’t set install_name via rustflags, fix it here:
-  install_name_tool -id "@rpath/${NAME}.framework/${NAME}" "$outdir/${NAME}.framework/${NAME}"
+    mkdir -p "${current_ver_dir}/Headers" "${current_ver_dir}/Modules" "${current_ver_dir}/Resources"
 
-  # Headers + module map
-  cp "${INCLUDE_DIR}/ddg_url_predictor.h" "$outdir/${NAME}.framework/Headers/"
-  cp "${INCLUDE_DIR}/module.modulemap" "$outdir/${NAME}.framework/Modules/"
+    # Binary
+    cp "$dylib" "${current_ver_dir}/${NAME}"
+    # install_name to versioned path
+    install_name_tool -id "@rpath/${NAME}.framework/Versions/A/${NAME}" "${current_ver_dir}/${NAME}"
 
-  # Metadata: Info.plist and PrivacyInfo.xcprivacy
-  write_info_plist "$outdir/${NAME}.framework" "$platform"
-  write_privacy_manifest "$outdir/${NAME}.framework"
+    # Headers + module map
+    cp "${INCLUDE_DIR}/ddg_url_predictor.h" "${current_ver_dir}/Headers/"
+    cp "${INCLUDE_DIR}/module.modulemap" "${current_ver_dir}/Modules/"
 
-  echo "${outdir}/${NAME}.framework"
+    # Metadata in Resources
+    write_info_plist "${current_ver_dir}/Resources" "$platform"
+    write_privacy_manifest "${current_ver_dir}/Resources"
+
+    # Symlinks
+    mkdir -p "${framework_dir}"
+    ln -sfn "A" "${versions_dir}/Current"
+    ln -sfn "Versions/Current/${NAME}" "${framework_dir}/${NAME}"
+    ln -sfn "Versions/Current/Headers" "${framework_dir}/Headers"
+    ln -sfn "Versions/Current/Modules" "${framework_dir}/Modules"
+    ln -sfn "Versions/Current/Resources" "${framework_dir}/Resources"
+
+    echo "${framework_dir}"
+  else
+    # iOS and iOS Simulator: shallow bundle
+    mkdir -p "${outdir}/${NAME}.framework/Headers"
+    mkdir -p "${outdir}/${NAME}.framework/Modules"
+
+    # Binary inside framework MUST be named like the framework (no 'lib' prefix)
+    cp "$dylib" "$outdir/${NAME}.framework/${NAME}"
+    install_name_tool -id "@rpath/${NAME}.framework/${NAME}" "$outdir/${NAME}.framework/${NAME}"
+
+    # Headers + module map
+    cp "${INCLUDE_DIR}/ddg_url_predictor.h" "$outdir/${NAME}.framework/Headers/"
+    cp "${INCLUDE_DIR}/module.modulemap" "$outdir/${NAME}.framework/Modules/"
+
+    # Metadata at top-level for shallow bundles
+    write_info_plist "$outdir/${NAME}.framework" "$platform"
+    write_privacy_manifest "$outdir/${NAME}.framework"
+
+    echo "${outdir}/${NAME}.framework"
+  fi
 }
 
 mkdir -p "${DIST_DIR}/macos-arm64_x86_64"
