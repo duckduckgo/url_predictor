@@ -457,6 +457,15 @@ pub extern "C" fn ddg_up_free_string(ptr: *mut c_char) {
     unsafe { let _ = CString::from_raw(ptr); }
 }
 
+#[cfg(feature = "real-psl")]
+#[unsafe(no_mangle)]
+pub extern "C" fn ddg_up_get_psl_data() -> *mut c_char {
+    // Return the vendored Public Suffix List contents as a C string.
+    // Caller must free with `ddg_up_free_string`.
+    const PSL: &str = include_str!("../assets/public_suffix_list.dat");
+    CString::new(PSL).unwrap().into_raw()
+}
+
 // -----------------------------------------------------------------------------
 // JNI (Android only)
 // -----------------------------------------------------------------------------
