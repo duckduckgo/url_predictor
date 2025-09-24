@@ -16,15 +16,37 @@ DIST_DIR="dist/apple"
 VERSION="$(grep -m1 '^version\s*=\s*\"' Cargo.toml | sed -E 's/.*\"([^\"]+)\".*/\1/')"
 BUNDLE_ID="${BUNDLE_ID:-com.duckduckgo.URLPredictorRust}"
 
+# Clean output folders
+rm -rf "${DIST_DIR}/macos-apple" "${DIST_DIR}/ios-apple" "${DIST_DIR}/iossim-apple"
+
 # Ensure targets
 rustup target add aarch64-apple-darwin x86_64-apple-darwin aarch64-apple-ios aarch64-apple-ios-sim x86_64-apple-ios
 
 # Build all
-MACOSX_DEPLOYMENT_TARGET="$MIN_MACOS" cargo build --release --features "${FEATURES}" --target aarch64-apple-darwin
-MACOSX_DEPLOYMENT_TARGET="$MIN_MACOS" cargo build --release --features "${FEATURES}" --target x86_64-apple-darwin
-IPHONEOS_DEPLOYMENT_TARGET="$MIN_IOS" cargo build --release --features "${FEATURES}" --target aarch64-apple-ios
-IPHONEOS_DEPLOYMENT_TARGET="$MIN_IOS" cargo build --release --features "${FEATURES}" --target aarch64-apple-ios-sim
-IPHONEOS_DEPLOYMENT_TARGET="$MIN_IOS" cargo build --release --features "${FEATURES}" --target x86_64-apple-ios
+MACOSX_DEPLOYMENT_TARGET="$MIN_MACOS" cargo build --release \
+  --config profile.release.debug=true \
+  --features "${FEATURES}" \
+  --target aarch64-apple-darwin
+
+MACOSX_DEPLOYMENT_TARGET="$MIN_MACOS" cargo build --release \
+  --config profile.release.debug=true \
+  --features "${FEATURES}" \
+  --target x86_64-apple-darwin
+
+IPHONEOS_DEPLOYMENT_TARGET="$MIN_IOS" cargo build --release \
+  --config profile.release.debug=true \
+  --features "${FEATURES}" \
+  --target aarch64-apple-ios
+
+IPHONEOS_DEPLOYMENT_TARGET="$MIN_IOS" cargo build --release \
+  --config profile.release.debug=true \
+  --features "${FEATURES}" \
+  --target aarch64-apple-ios-sim
+
+IPHONEOS_DEPLOYMENT_TARGET="$MIN_IOS" cargo build --release \
+  --config profile.release.debug=true \
+  --features "${FEATURES}" \
+  --target x86_64-apple-ios
 
 # Header
 INCLUDE_DIR="${DIST_DIR}/include"
@@ -180,12 +202,25 @@ F_MAC=$(make_framework "${DIST_DIR}/macos-arm64_x86_64" "macos")
 F_IOS=$(make_framework "${DIST_DIR}/ios-arm64" "ios")
 F_IOSSIM=$(make_framework "${DIST_DIR}/ios-arm64_x86_64-simulator" "iossim")
 
-# Create the xcframework from the frameworks (not from raw dylibs)
+# Generate dSYMs for each framework binary
+MAC_BIN_PATH="${F_MAC}/Versions/Current/${NAME}"
+IOS_BIN_PATH="${F_IOS}/${NAME}"
+IOSSIM_BIN_PATH="${F_IOSSIM}/${NAME}"
+
+MAC_DSYM_DIR="$(cd "$(dirname "${F_MAC}")" && pwd)/${NAME}.framework.dSYM"
+IOS_DSYM_DIR="$(cd "$(dirname "${F_IOS}")" && pwd)/${NAME}.framework.dSYM"
+IOSSIM_DSYM_DIR="$(cd "$(dirname "${F_IOSSIM}")" && pwd)/${NAME}.framework.dSYM"
+
+dsymutil "${MAC_BIN_PATH}" -o "${MAC_DSYM_DIR}" >/dev/null
+dsymutil "${IOS_BIN_PATH}" -o "${IOS_DSYM_DIR}" >/dev/null
+dsymutil "${IOSSIM_BIN_PATH}" -o "${IOSSIM_DSYM_DIR}" >/dev/null
+
+# Create the xcframework from the frameworks (not from raw dylibs), attaching dSYMs
 rm -rf "${DIST_DIR}/${NAME}.xcframework"
 xcodebuild -create-xcframework \
-  -framework "$F_MAC" \
-  -framework "$F_IOS" \
-  -framework "$F_IOSSIM" \
+  -framework "$F_MAC" -debug-symbols "${MAC_DSYM_DIR}" \
+  -framework "$F_IOS" -debug-symbols "${IOS_DSYM_DIR}" \
+  -framework "$F_IOSSIM" -debug-symbols "${IOSSIM_DSYM_DIR}" \
   -output "${DIST_DIR}/${NAME}.xcframework"
 
 echo "✅ Built ${DIST_DIR}/${NAME}.xcframework"
