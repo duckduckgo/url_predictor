@@ -7,6 +7,11 @@ header = """
 """
 include_version = true
 braces = "NextLine"
+documentation = true
+documentation_style = "doxy"
 
 [export]
-exclude = [ "ddg_up_get_psl_data" ]
+include = [
+  "ddg_up_classify_json",
+  "ddg_up_free_string",
+]

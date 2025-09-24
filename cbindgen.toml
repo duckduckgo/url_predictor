@@ -7,3 +7,15 @@ header = """
 """
 include_version = true
 braces = "NextLine"
+documentation = true
+documentation_style = "doxy"
+
+[export]
+include = [
+  "ddg_up_classify_json",
+  "ddg_up_free_string",
+  "ddg_up_get_psl_ptr",
+  "ddg_up_get_psl_len",
+]
+
+
