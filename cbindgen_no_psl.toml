@@ -14,8 +14,9 @@ documentation_style = "doxy"
 include = [
   "ddg_up_classify_json",
   "ddg_up_free_string",
+]
+
+exclude = [
   "ddg_up_get_psl_ptr",
   "ddg_up_get_psl_len",
 ]
-
-

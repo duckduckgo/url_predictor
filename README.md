@@ -88,6 +88,29 @@ ddg_up_free_string(result); // free it!
 
 ---
 
+### Accessing the Public Suffix List (PSL) via FFI
+
+When built with `--features real-psl`, the library exposes a **zero-copy** API:
+
+C (no copy):
+```c
+const char *p = ddg_up_get_psl_ptr();
+size_t len    = ddg_up_get_psl_len();
+/* Use as a read-only buffer of length `len`, or as a C string (NUL at p[len]). */
+/* Do NOT free(p). Memory lives for the process lifetime. */
+
+```
+
+Swift (no copy):
+```swift
+let p = ddg_up_get_psl_ptr()
+let n = ddg_up_get_psl_len()
+let data = Data(bytesNoCopy: UnsafeMutableRawPointer(mutating: p),
+                count: Int(n),
+                deallocator: .none) // do not free
+let text = String(data: data, encoding: .utf8)!
+```
+
 ## Building
 
 Default (uses a small demo suffix DB):

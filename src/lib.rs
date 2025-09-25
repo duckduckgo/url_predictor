@@ -17,6 +17,7 @@ use once_cell::sync::Lazy;
 use serde::{Deserialize, Serialize};
 use url::Url;
 
+
 // -----------------------------------------------------------------------------
 // Optional PSL backend (enabled with feature = "real-psl")
 // -----------------------------------------------------------------------------
@@ -428,11 +429,45 @@ fn host_like_valid(host: &str) -> bool {
     true
 }
 
+#[cfg(feature = "real-psl")]
+mod psl_buf {
+    use std::sync::OnceLock;
+
+    // Compile-time include of the PSL bytes
+    const PSL_BYTES: &[u8] = include_bytes!("../assets/public_suffix_list.dat");
+
+    // We expose a NUL-terminated view so C can treat it as a C string if desired.
+    // Stored in a static so we never re-allocate and lifetime is 'static.
+    static PSL_NUL: OnceLock<Box<[u8]>> = OnceLock::new();
+
+    pub fn buf_with_trailing_nul() -> &'static [u8] {
+        PSL_NUL.get_or_init(|| {
+            let mut v = Vec::with_capacity(PSL_BYTES.len() + 1);
+            v.extend_from_slice(PSL_BYTES);
+            v.push(0);
+            v.into_boxed_slice()
+        })
+    }
+}
+
 // -----------------------------------------------------------------------------
 // C FFI
 // -----------------------------------------------------------------------------
 
-#[unsafe(no_mangle)]
+/// Classify an input string (URL-ish or search) using a JSON-encoded `Policy`.
+///
+/// # Parameters
+/// - `input`: UTF-8 C string (NUL-terminated).
+/// - `policy_json`: UTF-8 C string with a JSON object for `Policy`.
+///
+/// # Returns
+/// A newly allocated UTF-8 JSON C string with a `Decision`.
+/// Must be freed with [`ddg_up_free_string`].
+///
+/// # Safety
+/// - `input` and `policy_json` must be valid pointers to NUL-terminated byte strings.
+/// - The returned pointer must be freed only via [`ddg_up_free_string`].
+#[no_mangle]
 pub extern "C" fn ddg_up_classify_json(input: *const c_char, policy_json: *const c_char) -> *mut c_char {
     let input = unsafe { CStr::from_ptr(input) }.to_string_lossy().to_string();
     let policy_json = unsafe { CStr::from_ptr(policy_json) }.to_string_lossy().to_string();
@@ -451,11 +486,49 @@ pub extern "C" fn ddg_up_classify_json(input: *const c_char, policy_json: *const
     CString::new(json).unwrap().into_raw()
 }
 
-#[unsafe(no_mangle)]
+/// Free a string returned by this library (e.g., from [`ddg_up_classify_json`]).
+///
+/// Safe to call with NULL; it will do nothing.
+///
+/// # Safety
+/// - `ptr` must be a pointer previously returned by this library.
+///   Do **not** pass a pointer from `malloc`/`new`/stack.
+#[no_mangle]
 pub extern "C" fn ddg_up_free_string(ptr: *mut c_char) {
     if ptr.is_null() { return; }
     unsafe { let _ = CString::from_raw(ptr); }
 }
+
+/// Get a pointer to the in-memory Public Suffix List (PSL) bytes.
+///
+/// Available only when built with the `real-psl` feature.
+///
+/// The memory is **owned by the library** and is valid for the lifetime of the process.
+/// Do **not** free it. The buffer is NUL-terminated for convenience.
+///
+/// Use together with [`ddg_up_get_psl_len`] to know the logical length (without the trailing NUL).
+///
+/// # Returns
+/// `*const c_char` pointing to a read-only, NUL-terminated buffer.
+#[cfg(feature = "real-psl")]
+#[no_mangle]
+pub extern "C" fn ddg_up_get_psl_ptr() -> *const c_char {
+    psl_buf::buf_with_trailing_nul().as_ptr() as *const c_char
+}
+
+/// Get the length (in bytes) of the PSL buffer returned by [`ddg_up_get_psl_ptr`].
+///
+/// The length **excludes** the trailing NUL.
+///
+/// # Returns
+/// `usize` length in bytes.
+#[cfg(feature = "real-psl")]
+#[no_mangle]
+pub extern "C" fn ddg_up_get_psl_len() -> usize {
+    // length *excluding* the trailing NUL
+    psl_buf::buf_with_trailing_nul().len().saturating_sub(1)
+}
+
 
 // -----------------------------------------------------------------------------
 // JNI (Android only)
@@ -772,6 +845,5 @@ mod tests {
         assert!(matches!(classify("foo.local", &p), Decision::Navigate { .. }));
         assert!(matches!(classify("foo.localhost", &p), Decision::Navigate { .. }));
     }
-
 }
 
