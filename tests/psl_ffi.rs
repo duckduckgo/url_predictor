@@ -26,7 +26,7 @@ fn psl_is_nul_terminated() {
     let len: usize = ddg_up_get_psl_len();
     assert_eq!(unsafe { *ptr.add(len) }, 0, "buffer must be NUL-terminated");
 
-    let ptr2: *const c_char = unsafe { ddg_up_get_psl_ptr() };
+    let ptr2: *const c_char = ddg_up_get_psl_ptr();
     assert_eq!(ptr, ptr2, "PSL pointer should be stable across calls");
 }
 
