@@ -1,0 +1,42 @@
+name: Release Apple
+
+on:
+  workflow_call:
+    inputs:
+      tag:
+        description: The tag to release
+        required: true
+        type: string
+
+jobs:
+  build:
+
+    runs-on: macos-latest
+
+    steps:
+
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Run unit tests
+        env:
+          CARGO_TERM_COLOR: always
+        run: cargo test
+
+      - name: Run unit tests (with PSL)
+        env:
+          CARGO_TERM_COLOR: always
+        run: cargo test --features real-psl
+
+      - name: Build Apple XCFramework
+        run: |
+          ./scripts/build_apple.sh
+
+      - name: Upload Apple XCFramework
+        uses: actions/upload-artifact@v4
+        with:
+          name: apple-xcframework
+          path: dist/apple/URLPredictorRust.xcframework.zip*
