@@ -17,6 +17,11 @@ rm -rf "${DIST_DIR}/macos-apple" "${DIST_DIR}/ios-apple" "${DIST_DIR}/iossim-app
 # Ensure targets
 rustup target add aarch64-apple-darwin x86_64-apple-darwin aarch64-apple-ios aarch64-apple-ios-sim x86_64-apple-ios
 
+# Patch PSL
+# https://app.asana.com/1/137249556945/project/1201037661562251/task/1211548841471885?focus=true
+grep -v "vistablog.ir" assets/public_suffix_list.dat > assets/public_suffix_list.dat.patched
+mv -f assets/public_suffix_list.dat.patched assets/public_suffix_list.dat
+
 # Build all
 MACOSX_DEPLOYMENT_TARGET="$MIN_MACOS" cargo build --release \
   --config profile.release.debug=true \
@@ -43,6 +48,9 @@ IPHONEOS_DEPLOYMENT_TARGET="$MIN_IOS" cargo build --release \
   --features "${FEATURES}" \
   --target x86_64-apple-ios
 
+# Revert PSL patch
+git checkout assets/public_suffix_list.dat
+
 # Header
 INCLUDE_DIR_ROOT="${DIST_DIR}/include"
 INCLUDE_DIR="${INCLUDE_DIR_ROOT}/URLPredictorRust"
@@ -55,8 +63,6 @@ module URLPredictorRust {
   export *
 }
 EOF
-
-## No framework assembly needed for static XCFrameworks
 
 mkdir -p "${DIST_DIR}/macos-arm64_x86_64"
 lipo -create \
@@ -88,4 +94,5 @@ ditto -c -k --keepParent "${DIST_DIR}/${NAME}.xcframework" "${DIST_DIR}/${NAME}.
 echo "✅ Zipped ${DIST_DIR}/${NAME}.xcframework.zip"
 
 checksum="$(swift package compute-checksum "${DIST_DIR}/${NAME}.xcframework.zip")"
+echo "$checksum" > "${DIST_DIR}/${NAME}.xcframework.zip.checksum"
 echo "Checksum: ${checksum}"
