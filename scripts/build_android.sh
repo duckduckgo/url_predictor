@@ -7,6 +7,7 @@ ANDROID_MODULE="${ANDROID_MODULE:-android/ddg-url-predictor}"  # Android library
 BUILD_TYPE="${BUILD_TYPE:-release}"                            # release|debug
 FEATURES="${FEATURES:-real-psl}"                               # cargo features (empty for none)
 ABIS="${ABIS:-arm64-v8a armeabi-v7a x86_64 x86}"              # ABIs to build
+PUBLISH="${PUBLISH:-false}"                                    # Whether to publish to Maven (default: false)
 
 # --- Flags ---
 #   --debug / --release
@@ -14,6 +15,7 @@ ABIS="${ABIS:-arm64-v8a armeabi-v7a x86_64 x86}"              # ABIs to build
 #   --module path/to/module
 #   --lib-name my_lib
 #   --abis "arm64-v8a x86_64"
+#   --publish (to publish to Maven)
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --debug) BUILD_TYPE="debug"; shift;;
@@ -22,6 +24,7 @@ while [[ $# -gt 0 ]]; do
     --module) ANDROID_MODULE="${2-}"; shift 2;;
     --lib-name) LIB_NAME="${2-}"; shift 2;;
     --abis) ABIS="${2-}"; shift 2;;
+    --publish) PUBLISH="true"; shift;;
     -h|--help)
       cat <<EOF
 Usage: $0 [options]
@@ -32,6 +35,7 @@ Options:
   --module <path>               Android module path (default: ${ANDROID_MODULE})
   --lib-name <name>             Rust library name (default: ${LIB_NAME})
   --abis "a b c"                ABIs (default: ${ABIS})
+  --publish                     Publish the built AAR to Maven (default: false)
 EOF
       exit 0;;
     *)
@@ -79,8 +83,16 @@ find "${JNI_LIBS_DIR}" -type f -name "lib${LIB_NAME}.so" -print
 echo "==> Building Android AAR..."
 pushd "$(dirname "${ANDROID_MODULE}")" >/dev/null
 ./gradlew clean ":$(basename "${ANDROID_MODULE}")":assembleRelease
+
+# --- Optionally publish to Maven ---
+if [[ "${PUBLISH}" == "true" ]]; then
+  echo "==> Publishing AAR to Maven..."
+  ./gradlew --no-daemon --stacktrace --info --warning-mode all ":$(basename "${ANDROID_MODULE}")":publish
+else
+  echo "Skipping Maven publish (use --publish to enable)"
+fi
+
 popd >/dev/null
 
 echo "Done."
 echo "AAR should be at: ${ANDROID_MODULE}/build/outputs/aar/$(basename "${ANDROID_MODULE}")-release.aar"
-

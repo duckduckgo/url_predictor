@@ -29,7 +29,7 @@ mavenPublishing {
     pom {
         name = "DDG URL Predictor"
         description = "DuckDuckGo URL Predictor Library."
-        inceptionYear = "2023"
+        inceptionYear = "2025"
         url = "https://github.com/duckduckgo/url_predictor"
         licenses {
             license {
@@ -54,7 +54,7 @@ mavenPublishing {
 }
 
 android {
-    compileSdk 35
+    compileSdk 36
 
     namespace "com.duckduckgo.urlpredictor"
 

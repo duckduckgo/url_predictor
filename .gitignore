@@ -26,6 +26,7 @@ android/local.properties
 # Android Studio / IntelliJ
 # =========================
 android/.idea/
+/.idea
 *.iml
 
 # =========================
