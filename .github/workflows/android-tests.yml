@@ -1,0 +1,50 @@
+name: Android tests
+
+on:
+  push:
+    paths:
+      - "android/**"
+      - "src/**"
+  pull_request:
+    paths:
+      - "android/**"
+      - "src/**"
+
+jobs:
+  android-tests:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # Rust is needed because host JNI lib is built for JVM tests
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Set up JDK for Gradle
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Cache Gradle
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
+          restore-keys: |
+            ${{ runner.os }}-gradle-
+
+      - name: Make scripts executable
+        run: |
+          chmod +x scripts/build_host_for_tests.sh
+          cd android && chmod +x gradlew
+
+      # Option A: Let Gradle trigger the host build via the task you wired
+      - name: Run JVM unit tests for ddg-url-predictor
+        working-directory: android
+        run: ./gradlew :ddg-url-predictor:testDebugUnitTest
+

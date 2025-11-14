@@ -40,7 +40,9 @@ object DecisionJson {
             "file",
             "about",
             "view-source",
-            "mailto", "tel", "sms" // optional, if you want these to navigate
+            "duck",
+            "edge",
+            "chrome",
         ),
     )
 }
