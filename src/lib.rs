@@ -533,7 +533,7 @@ pub extern "C" fn ddg_up_get_psl_len() -> usize {
 // -----------------------------------------------------------------------------
 // JNI (Android only)
 // -----------------------------------------------------------------------------
-#[cfg(target_os = "android")]
+#[cfg(any(target_os = "android", feature = "jni-host-tests"))]
 #[no_mangle]
 pub extern "system" fn Java_com_duckduckgo_urlpredictor_UrlPredictor_ddgClassifyJni(
     mut env: jni::JNIEnv,
@@ -844,6 +844,26 @@ mod tests {
         assert!(matches!(classify("foo.example", &p), Decision::Navigate { .. }));
         assert!(matches!(classify("foo.local", &p), Decision::Navigate { .. }));
         assert!(matches!(classify("foo.localhost", &p), Decision::Navigate { .. }));
+    }
+    #[test]
+    fn telephone_number_is_search() {
+        let p = policy_default_inet();
+        assert!(matches!(
+            classify("tel:+123456789", &p),
+            Decision::Search { query } if query == "tel:+123456789"
+        ));
+        assert!(matches!(
+            classify("tel:+4123423465", &p),
+            Decision::Search { query } if query == "tel:+4123423465"
+        ));
+        assert!(matches!(
+            classify("912345678", &p),
+            Decision::Search { query } if query == "912345678"
+        ));
+        assert!(matches!(
+            classify("+351 912 345 678", &p),
+            Decision::Search { query } if query == "+351 912 345 678"
+        ));
     }
 }
 

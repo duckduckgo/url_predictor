@@ -34,6 +34,7 @@ android/.idea/
 # (ignore if built outputs; keep if vendored)
 # =========================
 android/ddg-url-predictor/src/main/jniLibs/
+android/ddg-url-predictor/src/test/resources/
 
 # =========================
 # Misc / OS
