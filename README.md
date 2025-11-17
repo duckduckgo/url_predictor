@@ -157,6 +157,13 @@ Or run tests using the real PSL:
 cargo test --features real-psl
 ```
 
+To run the Android unit tests:
+```
+cargo build --release --features "real-psl jni-host-tests"
+cd android
+./gradlew :ddg-url-predictor:testDebugUnitTest
+```
+
 ---
 
 ## Notes

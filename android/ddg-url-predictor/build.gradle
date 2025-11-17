@@ -100,4 +100,18 @@ dependencies {
     implementation platform("org.jetbrains.kotlin:kotlin-bom:1.9.24")
     implementation "org.jetbrains.kotlin:kotlin-stdlib"         // version via BOM
     implementation "org.jetbrains.kotlinx:kotlinx-serialization-json:1.6.3"
+
+    testImplementation "org.jetbrains.kotlin:kotlin-test"
+    testImplementation "junit:junit:4.13.2"
+}
+
+// Task to run the host Rust build script for JVM tests
+tasks.register("buildHostNativeForTests", Exec) {
+    workingDir "${projectDir}/../../scripts"
+    commandLine "bash", "build_host_for_tests.sh"
+}
+
+tasks.withType(Test).configureEach {
+    dependsOn("buildHostNativeForTests")
+    systemProperty "java.library.path", "${projectDir}/src/test/resources/jni"
 }
