@@ -41,8 +41,6 @@ object DecisionJson {
             "about",
             "view-source",
             "duck",
-            "edge",
-            "chrome",
         ),
     )
 }

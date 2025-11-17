@@ -5,21 +5,25 @@ set -euo pipefail
 # 1) Set version.properties to a non-SNAPSHOT
 # 2) Commit "Release X.Y.Z"
 # 3) Tag "X.Y.Z" (annotated)
-# 4) Push + push --tags
-# 5) Bump to next -SNAPSHOT (defaults to patch+1)
-# 6) Commit "Prepare next development version."
-# 7) Push
+# 4) (Optional) Publish release version to Maven local
+# 5) Push + push --tags
+# 6) Bump to next -SNAPSHOT (defaults to patch+1)
+# 7) Commit "Prepare next development version."
+# 8) Push
 #
 # Usage examples:
 #   ./release_android.sh --new-version 1.2.3
 #   ./release_android.sh --new-version 1.2.3 --bump minor
 #   ./release_android.sh --new-version 1.2.3 --next-snapshot 1.3.0-SNAPSHOT
+#   ./release_android.sh --new-version 1.2.3 --maven-local
 #
 # Optional:
 #   --version-file <path>   default: version.properties
 #   --no-push               do everything except pushing
 #   --dry-run               print what would happen, don’t change anything
 #   --tag-prefix ""         default: "" (set to "v" if you want tags like v1.2.3)
+#   --maven-local           Publish release version to Maven local and skip push
+#                           (runs MAVEN_LOCAL_CMD, default: "./gradlew publishToMavenLocal")
 
 NEW_VERSION=""
 NEXT_SNAPSHOT=""
@@ -28,6 +32,9 @@ BUMP_KIND="patch"     # patch|minor|major
 PUSH="true"
 DRY_RUN="false"
 TAG_PREFIX="${TAG_PREFIX:-}"
+MAVEN_LOCAL="false"
+MAVEN_LOCAL_CMD="${MAVEN_LOCAL_CMD:-./gradlew :ddg-url-predictor:publishToMavenLocal -PskipSigning}"
+
 
 die() { echo "Error: $*" >&2; exit 1; }
 run() { if [[ "$DRY_RUN" == "true" ]]; then echo "[dry-run] $*"; else eval "$@"; fi; }
@@ -47,6 +54,8 @@ Options:
                               (default: ${VERSION_FILE})
   --tag-prefix <prefix>       Prefix for git tag (default: "${TAG_PREFIX}")
   --no-push                   Do everything except pushing
+  --maven-local               Publish release version to Maven local and skip push
+                              (uses MAVEN_LOCAL_CMD: ${MAVEN_LOCAL_CMD})
   --dry-run                   Show actions without changing anything
   -h | --help                 Show this help
 EOF
@@ -61,6 +70,11 @@ while [[ $# -gt 0 ]]; do
     --version-file) VERSION_FILE="${2-}"; shift 2;;
     --tag-prefix) TAG_PREFIX="${2-}"; shift 2;;
     --no-push) PUSH="false"; shift;;
+    --maven-local)
+      MAVEN_LOCAL="true"
+      PUSH="false"   # releasing to mavenLocal implies no push
+      shift
+      ;;
     --dry-run) DRY_RUN="true"; shift;;
     -h|--help) usage; exit 0;;
     *) die "Unknown option: $1";;
@@ -127,9 +141,15 @@ fi
 
 # Ensure tag doesn't already exist
 TAG_NAME="${TAG_PREFIX}${NEW_VERSION}"
-run "git fetch --tags"
-if git rev-parse "$TAG_NAME" >/dev/null 2>&1; then
-  die "Tag already exists: $TAG_NAME"
+
+if [[ "$MAVEN_LOCAL" != "true" ]]; then
+  # Ensure tag doesn't already exist
+  run "git fetch --tags"
+  if git rev-parse "$TAG_NAME" >/dev/null 2>&1; then
+    die "Tag already exists: $TAG_NAME"
+  fi
+else
+  echo "[info] Skipping tag existence check (--maven-local)"
 fi
 
 echo "Current VERSION_NAME: ${CURRENT_VERSION}"
@@ -139,6 +159,10 @@ echo "Version file        : ${VERSION_FILE}"
 echo "Tag name            : ${TAG_NAME}"
 echo "Push to remote      : ${PUSH}"
 echo "Dry run             : ${DRY_RUN}"
+echo "Maven local         : ${MAVEN_LOCAL}"
+if [[ "$MAVEN_LOCAL" == "true" ]]; then
+  echo "Maven local command : ${MAVEN_LOCAL_CMD}"
+fi
 echo
 
 # --- Step 1: set release version ---
@@ -149,28 +173,43 @@ run "git add '$VERSION_FILE'"
 run "git commit -m 'Release ${NEW_VERSION}'"
 
 # --- Step 3: tag release (annotated) ---
-run "git tag -a '${TAG_NAME}' -m '${NEW_VERSION}'"
+# # --- Step 3: tag release (annotated) ---
+if [[ "$MAVEN_LOCAL" != "true" ]]; then
+  run "git tag -a '${TAG_NAME}' -m '${NEW_VERSION}'"
+else
+  echo "[info] Skipping tag creation (--maven-local)"
+fi
 
-# --- Step 4: push commit + tags ---
+# --- Step 4 (optional): publish to Maven local ---
+if [[ "$MAVEN_LOCAL" == "true" ]]; then
+  echo "Publishing release ${NEW_VERSION} to Maven local..."
+  run "${MAVEN_LOCAL_CMD}"
+fi
+
+# --- Step 5: push commit + tags ---
 if [[ "$PUSH" == "true" ]]; then
   run "git push"
   run "git push --tags"
 else
-  echo "[info] Skipping push (--no-push)"
+  echo "[info] Skipping push (--no-push or --maven-local)"
 fi
 
-# --- Step 5: bump to next snapshot ---
+# --- Step 6: bump to next snapshot ---
 set_version "$NEXT_SNAPSHOT"
 
-# --- Step 6: commit snapshot ---
+# --- Step 7: commit snapshot ---
 run "git add '$VERSION_FILE'"
 run "git commit -m 'Prepare next development version.'"
 
-# --- Step 7: push snapshot commit ---
+# --- Step 8: push snapshot commit ---
 if [[ "$PUSH" == 'true' ]]; then
   run "git push"
 else
-  echo "[info] Skipping push (--no-push)"
+  echo "[info] Skipping push of snapshot commit (--no-push or --maven-local)"
 fi
 
 echo "✅ Release ${NEW_VERSION} completed. Next development version: ${NEXT_SNAPSHOT}"
+if [[ "$MAVEN_LOCAL" == "true" ]]; then
+  echo "📦 Published ${NEW_VERSION} to Maven local (command: ${MAVEN_LOCAL_CMD})"
+fi
+

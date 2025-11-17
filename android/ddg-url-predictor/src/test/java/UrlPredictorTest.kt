@@ -109,4 +109,22 @@ class UrlPredictorTests {
         val d = classify("-badlabel.com")
         assertTrue(d is Decision.Search)
     }
+
+    @Test
+    fun `chrome scheme becomes search`() {
+        val d = classify("chrome://flags")
+        assertTrue(d is Decision.Search)
+    }
+
+    @Test
+    fun `edge scheme becomes search`() {
+        val d = classify("edge://flags")
+        assertTrue(d is Decision.Search)
+    }
+
+    @Test
+    fun `duck scheme navigates`() {
+        val d = classify("duck://flags")
+        assertTrue(d is Decision.Navigate)
+    }
 }

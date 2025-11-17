@@ -22,7 +22,10 @@ mavenPublishing {
     // publishing to CentralPortal (https://repo.maven.apache.org/maven2/com/duckduckgo/urlpredictor/url-predictor-android/)
     publishToMavenCentral()
 
-    signAllPublications()
+    // Only sign when we *don't* explicitly opt out (e.g. for real Central releases)
+    if (!project.hasProperty("skipSigning")) {
+        signAllPublications()
+    }
 
     coordinates("com.duckduckgo.urlpredictor", "url-predictor-android", "${getVersionName}")
 
