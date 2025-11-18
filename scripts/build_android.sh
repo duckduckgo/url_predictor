@@ -69,6 +69,9 @@ if [[ -n "${FEATURES}" ]]; then
   FEATURE_FLAGS+=(--features "${FEATURES}")
 fi
 
+# Ensure ELF LOAD segments are aligned to at least 16KB (2**14).
+export RUSTFLAGS="${RUSTFLAGS:-} -C link-arg=-Wl,-z,max-page-size=0x4000 -Wl,-z,common-page-size=16384"
+
 # --- Build per ABI ---
 for ABI in ${ABIS}; do
   echo "==> Building for ABI: ${ABI}"

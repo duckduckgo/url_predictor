@@ -865,5 +865,14 @@ mod tests {
             Decision::Search { query } if query == "+351 912 345 678"
         ));
     }
+
+    #[cfg(feature = "real-psl")]
+    #[test]
+    fn mailto_urls_become_search() {
+        let p = Policy::default();
+        assert!(matches!(classify("mailto:test@google.com", &p), Decision::Navigate { .. }));
+        assert!(matches!(classify("mailto:test@yahoo.com", &p), Decision::Navigate { .. }));
+        assert!(matches!(classify("mailto:test@hotmail.com", &p), Decision::Navigate { .. }));
+    }
 }
 
