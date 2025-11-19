@@ -94,5 +94,5 @@ ditto -c -k --keepParent "${DIST_DIR}/${NAME}.xcframework" "${DIST_DIR}/${NAME}.
 echo "✅ Zipped ${DIST_DIR}/${NAME}.xcframework.zip"
 
 checksum="$(swift package compute-checksum "${DIST_DIR}/${NAME}.xcframework.zip")"
-echo "$checksum" > "${DIST_DIR}/${NAME}.xcframework.zip.checksum"
+echo "$checksum" > "${DIST_DIR}/${NAME}.xcframework.zip.checksum.txt"
 echo "Checksum: ${checksum}"

@@ -1,19 +1,31 @@
 name: Release
 
+# This workflow runs platform-specific release workflows, collects platform-specific artifacts
+# and creates a GitHub Release with all the artifacts attached.
+
 on:
   push:
     tags:
-      - '[0-9]+.[0-9]+.[0-9]+'
+      - '[0-9]+.[0-9]+.[0-9]+' # run on push to tags matching X.Y.Z
 
 jobs:
+  # Run the Apple release workflow
   release_apple:
     uses: ./.github/workflows/release_apple.yml
     with:
       tag: ${{ github.ref_name }}
 
+  # Add other platform-specific release jobs here as they are added.
+  # release_windows:
+  #   uses: ./.github/workflows/release_windows.yml
+  #   with:
+  #     tag: ${{ github.ref_name }}
+
   release:
 
     runs-on: ubuntu-latest
+    # Wait for the Apple release workflow to complete
+    # Add more platform-specific jobs here as they are added.
     needs: release_apple
 
     steps:
