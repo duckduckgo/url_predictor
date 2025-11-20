@@ -39,7 +39,7 @@ class UrlPredictorTests {
     }
 
     @Test
-    fun `telephone number with intl formatting is search`() {
+    fun `telephone number with intl forma  tting is search`() {
         val input = "+351 912 345 678"
         val d = classify(input)
         assertTrue(d is Decision.Search)
@@ -125,6 +125,23 @@ class UrlPredictorTests {
     @Test
     fun `duck scheme navigates`() {
         val d = classify("duck://flags")
+        assertTrue(d is Decision.Navigate)
+    }
+
+    // ------------------------------------------------------------------------
+    // mailto URLs
+    // ------------------------------------------------------------------------
+
+    @Test
+    fun `mailto google becomes search`() {
+        val d = classify("mailto:test@google.com")
+        assertTrue(d is Decision.Navigate)
+    }
+
+    @Test
+    fun `mailto yahoo becomes search`() {
+
+        val d = classify("mailto:test@yahoo.com")
         assertTrue(d is Decision.Navigate)
     }
 }
