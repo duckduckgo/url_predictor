@@ -1,0 +1,28 @@
+name: Release Windows
+
+on:
+  workflow_call:
+    inputs:
+      tag:
+        description: The tag to release
+        required: true
+        type: string
+
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: The tag to release
+        required: true
+        type: string
+
+concurrency:
+  group: win-build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  release:
+    runs-on: windows-2022
+    timeout-minutes: 20
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
