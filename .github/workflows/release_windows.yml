@@ -26,3 +26,35 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v3
+        with:
+            dotnet-version: '6.0.x'
+            source-url: 'https://pkgs.dev.azure.com/ddgwindows/windows-nuget/_packaging/windows-nuget-feed/nuget/v3/index.json'
+        env:
+            NUGET_AUTH_TOKEN: ${{ secrets.AZURE_DEVOPS_TOKEN }}
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Run unit tests
+        env:
+          CARGO_TERM_COLOR: always
+        run: cargo test
+
+      - name: Run unit tests (with PSL)
+        env:
+          CARGO_TERM_COLOR: always
+        run: cargo test --features real-psl
+
+      - name: Build Windows artifacts
+        run: |
+          .\scripts\build_windows.ps1
+
+      - name: Create and publish NuGet package
+        run: |
+          $version = "${{ inputs.tag }}" -replace '^v', ''
+          nuget pack windows\windows.nuspec -Version $version -OutputDirectory dist\windows\nuget
+          dotnet nuget push --skip-duplicate --api-key AzureArtifacts dist\windows\nuget\*.nupkg
+
