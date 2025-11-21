@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<package xmlns="http://schemas.microsoft.com/packaging/2013/05/nuspec.xsd">
+  <metadata>
+    <id>DdgUrlPredictor</id>
+    <version>0.0.0-dev</version>
+    <title>DdgUrlPredictor</title>
+    <authors>DuckDuckGo</authors>
+    <requireLicenseAcceptance>false</requireLicenseAcceptance>
+    <description>Distributable files of DDG's url predictor</description>
+    <dependencies />
+  </metadata>
+  <files>
+    <file src="..\dist\windows\bin\url_predictor-x64.dll" target="runtimes\win-x64\native\url_predictor.dll" />
+    <file src="..\dist\windows\bin\url_predictor-x86.dll" target="runtimes\win-x86\native\url_predictor.dll" />
+    <file src="..\dist\windows\bin\url_predictor-arm64.dll" target="runtimes\win-arm64\native\url_predictor.dll" />
+  </files>
+</package>
