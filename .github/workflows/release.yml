@@ -22,12 +22,18 @@ jobs:
       tag: ${{ github.ref_name }}
     secrets: inherit
 
+  # Run the Apple release workflow
+  release_android:
+    uses: ./.github/workflows/release_android.yml
+    with:
+      tag: ${{ github.ref_name }}
+
   release:
 
     runs-on: ubuntu-latest
-    # Wait for the Apple and Windows release workflows to complete
+    # Wait for the Android, Apple and Windows release workflows to complete
     # Add more platform-specific jobs here as they are added.
-    needs: [release_apple, release_windows]
+    needs: [release_apple, release_windows, release_android]
 
     steps:
 

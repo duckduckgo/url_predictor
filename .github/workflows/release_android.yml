@@ -1,23 +1,15 @@
-name: build
+name: Release Android
 
 on:
-  push:
-    branches:
-      - main
-    paths-ignore:
-      - '**.md'
-      - '.github/**'
-  workflow_dispatch:
-
-concurrency:
-  group: build-${{ github.ref }}
-  cancel-in-progress: true
-
-permissions:
-  contents: read
+  workflow_call:
+    inputs:
+      tag:
+        description: The tag to release
+        required: true
+        type: string
 
 jobs:
-  publish:
+  release:
     runs-on: ubuntu-latest
     if: github.repository == 'duckduckgo/url_predictor' && github.ref == 'refs/heads/main'
 
