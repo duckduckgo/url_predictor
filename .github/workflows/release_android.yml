@@ -11,7 +11,6 @@ on:
 jobs:
   release:
     runs-on: ubuntu-latest
-    if: github.repository == 'duckduckgo/url_predictor' && github.ref == 'refs/heads/main'
 
     steps:
       - name: Checkout
