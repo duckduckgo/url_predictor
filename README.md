@@ -37,9 +37,11 @@ Behavior is tuned via a `Policy`:
 ```rust
 #[derive(Serialize, Deserialize)]
 pub struct Policy {
+    pub allow_intranet_multi_label: bool,
     pub allow_intranet_single_label: bool,
     pub allow_private_suffix: bool,
     pub allowed_schemes: BTreeSet<String>,
+    pub allow_file_paths: bool,
 }
 ```
 
