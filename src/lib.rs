@@ -101,6 +101,8 @@ pub struct Policy {
     pub allow_intranet_single_label: bool,
     pub allow_private_suffix: bool,
     pub allowed_schemes: BTreeSet<String>,
+    #[serde(default)]
+    pub allow_file_paths: bool,
 }
 
 impl Default for Policy {
@@ -114,6 +116,7 @@ impl Default for Policy {
             allow_intranet_single_label: false,
             allow_private_suffix: true,
             allowed_schemes: allowed,
+            allow_file_paths: false,
         }
     }
 }
@@ -224,6 +227,11 @@ pub fn classify_with_db(input: &str, policy: &Policy, db: &dyn SuffixDb) -> Deci
     // Host-like?
     if let Some(nav) = classify_host_like(original, policy, db) {
         return nav;
+    }
+
+    // File path, e.g. "C:\Users\Username\Documents\file.html"
+    if policy.allow_file_paths && is_file_path(original) {
+        return Decision::Navigate { url: format!("file://{}", original) };
     }
 
     // Fallback
@@ -427,6 +435,44 @@ fn host_like_valid(host: &str) -> bool {
         return false;
     }
     true
+}
+
+#[cfg(target_os = "windows")]
+fn is_file_path(input: &str) -> bool {
+    // This is a copy of the logic .NET's Uri class uses to determine if a string is a file path.
+
+    let bytes = input.as_bytes();
+    
+    if bytes.len() < 3 {
+        return false;
+    }
+    
+    // Drive-based path, e.g. C:\foo\bar
+    if (bytes[1] == b':' || bytes[1] == b'|')
+        && bytes[0].is_ascii_alphabetic()
+        && (bytes[2] == b'\\' || bytes[2] == b'/')
+    {
+        return true;
+    }
+    
+    // UNC-based path, e.g. \\host\foo\bar
+    if (bytes[0] == b'\\' || bytes[0] == b'/')
+        && (bytes[1] == b'\\' || bytes[1] == b'/')
+    {
+        return true;
+    }
+    
+    false
+}
+
+#[cfg(target_os = "macos")]
+fn is_file_path(input: &str) -> bool {
+    !input.is_empty() && input.as_bytes()[0] == b'/'
+}
+
+#[cfg(not(any(target_os = "windows", target_os = "macos")))]
+fn is_file_path(_input: &str) -> bool {
+    false
 }
 
 #[cfg(feature = "real-psl")]
@@ -873,6 +919,121 @@ mod tests {
         assert!(matches!(classify("mailto:test@google.com", &p), Decision::Navigate { .. }));
         assert!(matches!(classify("mailto:test@yahoo.com", &p), Decision::Navigate { .. }));
         assert!(matches!(classify("mailto:test@hotmail.com", &p), Decision::Navigate { .. }));
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn macos_file_paths_with_policy() {
+        let test_cases = vec![
+            ("/tmp/test.txt", true),
+            ("/etc/hosts", true),
+            ("/", true),
+            ("/file.txt", true),
+            ("example.com", false),
+            ("./relative/path", false),
+            ("../parent/path", false),
+            ("relative/path", false),
+            ("http://example.com", false),
+            ("file.txt", false),
+            ("~/Documents/file.txt", false),
+        ];
+
+        for (input, is_file_path) in &test_cases {
+            let mut p = Policy::default();
+            p.allow_file_paths = false;
+            
+            if *is_file_path {
+                let result = classify(input, &p);
+                assert!(matches!(result, Decision::Search { .. }),
+                    "Expected Search for '{}' when allow_file_paths=false, got {:?}", input, result);
+            }
+            
+            p.allow_file_paths = true;
+            
+            if *is_file_path {
+                let result = classify(input, &p);
+                match result {
+                    Decision::Navigate { ref url } => {
+                        assert!(url.starts_with("file://"), 
+                            "Expected file:// URL for '{}', got '{}'", input, url);
+                        assert!(url.contains(input),
+                            "Expected URL '{}' to contain original path '{}'", url, input);
+                    },
+                    Decision::Search { ref query } => {
+                        panic!("Expected Navigate for '{}' when allow_file_paths=true, got Search with query '{}'", input, query);
+                    }
+                }
+            } else {
+                let result = classify(input, &p);
+                match result {
+                    Decision::Navigate { .. } | Decision::Search { .. } => {},
+                }
+            }
+        }
+    }
+
+    #[cfg(target_os = "windows")]
+    #[test]
+    fn windows_file_paths_with_policy() {
+        let test_cases = vec![
+            (r"C:\foo\bar", true),
+            (r"D:\Documents\file.html", true),
+            ("C:/foo/bar", true),
+            ("D:/Documents/file.html", true),
+            (r"C|\foo\bar", true),
+            ("C|/foo/bar", true),
+            (r"\\server\share\file", true),
+            (r"\\host\path\to\document.txt", true),
+            (r"c:\users\test\file.html", true),
+            ("c:/foo/bar", true),
+            ("d:/documents/file.html", true),
+            ("z:/test/path", true),
+            (r"c|\foo\bar", true),
+            ("d|/documents/file", true),
+            (r"a:\floppy\old.txt", true),
+            ("example.com", false),
+            ("C:", false),
+            ("c:", false),
+            ("C", false),
+            ("1:2:3", false),
+            ("::\\test", false),
+            ("http://example.com", false),
+            ("/single/slash/path", false),
+            (r"\single\slash", false),
+        ];
+
+        for (input, is_file_path) in &test_cases {
+            let mut p = Policy::default();
+            p.allow_file_paths = false;
+            
+            if *is_file_path {
+                let result = classify(input, &p);
+                assert!(matches!(result, Decision::Search { .. }),
+                    "Expected Search for '{}' when allow_file_paths=false, got {:?}", input, result);
+            }
+            
+            p.allow_file_paths = true;
+            
+            if *is_file_path {
+                let result = classify(input, &p);
+                match result {
+                    Decision::Navigate { ref url } => {
+                        assert!(url.starts_with("file://"), 
+                            "Expected file:// URL for '{}', got '{}'", input, url);
+                        assert!(url.contains(input),
+                            "Expected URL '{}' to contain original path '{}'", url, input);
+                    },
+                    Decision::Search { ref query } => {
+                        panic!("Expected Navigate for '{}' when allow_file_paths=true, got Search with query '{}'", input, query);
+                    }
+                }
+            } else {
+                let result = classify(input, &p);
+                match result {
+                    Decision::Navigate { .. } | Decision::Search { .. } => {},
+                }
+            }
+        }
     }
 }
 
