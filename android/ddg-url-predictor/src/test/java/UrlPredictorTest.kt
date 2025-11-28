@@ -2,13 +2,35 @@ package com.duckduckgo.urlpredictor
 
 import org.junit.Assert.*
 import org.junit.Test
+import java.util.concurrent.CountDownLatch
+import kotlin.concurrent.thread
 
 class UrlPredictorTests {
 
     private fun classify(input: String): Decision {
-        return UrlPredictor.classify(input)
+        val latch = CountDownLatch(1)
+        thread {
+            UrlPredictor.allowInitOnMainThreadInTests = true
+            UrlPredictor.init() // idempotent, it's fine to call multiple times
+            latch.countDown()
+        }
+        latch.await()
+
+        return UrlPredictor.get().classify(input)
     }
 
+    @Test
+    fun `return false when not initialized`() {
+        UrlPredictor.destroyForTests()
+        assertFalse(UrlPredictor.isInitialized())
+    }
+
+    @Test
+    fun `return true when is initialized`() {
+        UrlPredictor.destroyForTests()
+        classify("test")
+        assertTrue(UrlPredictor.isInitialized())
+    }
     // ------------------------------------------------------------------------
     // Basic behavior
     // ------------------------------------------------------------------------
