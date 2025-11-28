@@ -874,5 +874,114 @@ mod tests {
         assert!(matches!(classify("mailto:test@yahoo.com", &p), Decision::Navigate { .. }));
         assert!(matches!(classify("mailto:test@hotmail.com", &p), Decision::Navigate { .. }));
     }
+
+    #[test]
+    fn ipv6_formats() {
+        let p = policy_default_inet();
+        
+        // IPv6 format variations
+        let ipv6_formats = [
+            // 1. Standard Full Representation (Canonical)
+            // 8 groups of 4 hexadecimal digits, including leading zeros.
+            "2001:0db8:85a3:0000:0000:8a2e:0370:7334",
+
+            // 2. Leading Zeros Omitted
+            // Zeros at the start of any group are removed.
+            "2001:db8:85a3:0:0:8a2e:370:7334",
+
+            // 3. Compressed (Double Colon)
+            // Continuous blocks of zeros are replaced by '::'. Used in the middle.
+            "2001:db8:85a3::8a2e:370:7334",
+
+            // 4. Leading Compression
+            // The address starts with zeros, replaced by '::'.
+            "::8a2e:370:7334",
+
+            // 5. Trailing Compression
+            // The address ends with zeros, replaced by '::'.
+            "2001:db8:85a3::",
+
+            // 6. Unspecified Address
+            // Represents 0.0.0.0 in IPv6 (absence of an address).
+            "::",
+
+            // 7. Loopback Address (Compressed)
+            // Represents localhost (127.0.0.1).
+            "::1",
+
+            // 8. Loopback Address (Full)
+            // The non-compressed version of localhost.
+            "0000:0000:0000:0000:0000:0000:0000:0001",
+
+            // 9. IPv4-Mapped IPv6 Address
+            // Used by dual-stack software; the last 32 bits are decimal.
+            "::ffff:192.168.1.1",
+
+            // 10. IPv4-Compatible IPv6 Address (Deprecated)
+            // Older format, rarely used now, but syntactically valid.
+            "::192.168.1.1",
+
+            // Currently not supported
+
+            // 11. Link-Local with Zone ID (Linux/Unix)
+            // Includes the '%' separator and the interface name (Scope ID).
+            //"fe80::1ff:fe23:4567:890a%eth0",
+
+            // 12. Link-Local with Zone ID (Windows)
+            // Includes the '%' separator and the numeric interface index.
+            //"fe80::1ff:fe23:4567:890a%3",
+
+            // 13. CIDR Notation (Network Prefix)
+            // Address followed by '/' and the routing prefix length.
+            //"2001:db8:abcd:0012::0/64",
+        ];
+
+        // Test cases that are currently not supported
+        let disabled_test_cases = vec![
+            "2001:0db8:85a3:0000:0000:8a2e:0370:7334",
+            "2001:db8:85a3:0:0:8a2e:370:7334",
+            "::1",
+            "0000:0000:0000:0000:0000:0000:0000:0001",
+        ];
+
+        // Generate test cases
+        let test_cases: Vec<String> = ipv6_formats
+            .iter()
+            .flat_map(|ip| {
+                vec![
+                    ip.to_string(),
+                    format!("[{ip}]"),
+                    format!("[{ip}]:80"),
+                    format!("http://[{ip}]"),
+                    format!("http://[{ip}]:80"),
+                ]
+            })
+            .collect();
+
+        // Filter out disabled test cases
+        let enabled_test_cases: Vec<&String> = test_cases
+            .iter()
+            .filter(|tc| !disabled_test_cases.contains(&tc.as_str()))
+            .collect();
+
+        // Collect all failures instead of stopping at the first one
+        let mut failures = Vec::new();
+        for test_case in &enabled_test_cases {
+            let result = classify(test_case, &p);
+            if !matches!(result, Decision::Navigate { .. }) {
+                failures.push(format!("  - Input: '{}' -> Result: {:?}", test_case, result));
+            }
+        }
+
+        // Report all failures at once
+        if !failures.is_empty() {
+            panic!(
+                "IPv6 test failures ({} out of {} cases):\n{}",
+                failures.len(),
+                enabled_test_cases.len(),
+                failures.join("\n")
+            );
+        }
+    }
 }
 
