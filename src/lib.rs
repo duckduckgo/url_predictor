@@ -101,6 +101,8 @@ pub struct Policy {
     pub allow_intranet_single_label: bool,
     pub allow_private_suffix: bool,
     pub allowed_schemes: BTreeSet<String>,
+    #[serde(default)]
+    pub allow_file_paths: bool,
 }
 
 impl Default for Policy {
@@ -114,6 +116,7 @@ impl Default for Policy {
             allow_intranet_single_label: false,
             allow_private_suffix: true,
             allowed_schemes: allowed,
+            allow_file_paths: false,
         }
     }
 }
@@ -213,6 +216,13 @@ pub fn classify_with_db(input: &str, policy: &Policy, db: &dyn SuffixDb) -> Deci
                     return Decision::Navigate { url: u.to_string() };
                 }
             }
+        }
+    }
+
+    // File path, e.g. "C:\Users\Username\Documents\file.html"
+    if policy.allow_file_paths {
+        if let Some(url) = is_file_path(original) {
+            return Decision::Navigate { url };
         }
     }
 
@@ -427,6 +437,14 @@ fn host_like_valid(host: &str) -> bool {
         return false;
     }
     true
+}
+
+fn is_file_path(input: &str) -> Option<String> {
+    if let Ok(u) = Url::from_file_path(&input) {
+        Some(u.to_string())
+    } else {
+        None
+    }
 }
 
 #[cfg(feature = "real-psl")]
@@ -981,6 +999,130 @@ mod tests {
                 enabled_test_cases.len(),
                 failures.join("\n")
             );
+        }
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn macos_file_paths_with_policy() {
+        let test_cases = vec![
+            // Basic absolute paths
+            ("/etc/test.html", "file:///etc/test.html"),
+            ("/etc/test", "file:///etc/test"),
+            ("/", "file:///"),
+            
+            // Paths with special characters (no spaces)
+            ("/path/to/file?query=value", "file:///path/to/file%3Fquery=value"),
+            ("/path/to/file#anchor", "file:///path/to/file%23anchor"),
+            
+            // Paths with Unicode characters
+            ("/Users/用户/文件.html", "file:///Users/%E7%94%A8%E6%88%B7/%E6%96%87%E4%BB%B6.html"),
+            ("/путь/к/файлу.txt", "file:///%D0%BF%D1%83%D1%82%D1%8C/%D0%BA/%D1%84%D0%B0%D0%B9%D0%BB%D1%83.txt"),
+            
+            // Paths with dots
+            ("/path/../other/file.html", "file:///path/../other/file.html"),
+            ("/./file.html", "file:///file.html"),
+            
+            // Paths with encoded characters (treated as literals, not decoded)
+            ("/path%20with%20spaces.html", "file:///path%2520with%2520spaces.html"), 
+            
+            // Paths with spaces
+            ("/path with spaces.html", "file:///path%20with%20spaces.html"),
+            ("/path with spaces/file.html", "file:///path%20with%20spaces/file.html"),
+        ];
+
+        for (input, expected) in &test_cases {
+            let mut p = Policy::default();
+            p.allow_file_paths = false;
+            
+            let result = classify(input, &p);
+            assert!(matches!(result, Decision::Search { .. }),
+                "Expected Search for '{}' when allow_file_paths=false, got {:?}", input, result);
+            
+            p.allow_file_paths = true;
+            
+            let result = classify(input, &p);
+            match result {
+                Decision::Navigate { ref url } => {
+                    assert_eq!(url, expected,
+                        "Expected '{}' for input '{}', got '{}'", expected, input, url);
+                },
+                Decision::Search { ref query } => {
+                    panic!("Expected Navigate for '{}' when allow_file_paths=true, got Search with query '{}'", input, query);
+                }
+            }
+        }
+    }
+
+    #[cfg(target_os = "windows")]
+    #[test]
+    fn windows_file_paths_with_policy() {
+        let test_cases = vec![
+            // Basic drive paths with backslashes
+            (r"C:\foo\bar.html", "file:///C:/foo/bar.html"),
+            (r"c:\foo\bar.html", "file:///C:/foo/bar.html"),
+            
+            // Drive paths with forward slashes
+            ("C:/foo/bar.html", "file:///C:/foo/bar.html"),
+            ("c:/foo/bar.html", "file:///C:/foo/bar.html"),
+            
+            // UNC paths (only with backslashes, forward slashes are scheme-relative URLs)
+            (r"\\foo\bar.html", "file://foo/bar.html"),
+            (r"\\server\share\file.txt", "file://server/share/file.txt"),
+            
+            // Paths with special characters
+            (r"C:\path\file?query=1", "file:///C:/path/file%3Fquery=1"),
+            (r"C:\path\file#anchor", "file:///C:/path/file%23anchor"),
+            
+            // Paths with Unicode characters
+            (r"C:\Users\用户\文件.html", "file:///C:/Users/%E7%94%A8%E6%88%B7/%E6%96%87%E4%BB%B6.html"),
+            (r"C:\путь\к\файлу.txt", "file:///C:/%D0%BF%D1%83%D1%82%D1%8C/%D0%BA/%D1%84%D0%B0%D0%B9%D0%BB%D1%83.txt"),
+            
+            // Different drive letters
+            (r"D:\data\file.txt", "file:///D:/data/file.txt"),
+            (r"E:\backup\archive.zip", "file:///E:/backup/archive.zip"),
+            (r"Z:\network\share.doc", "file:///Z:/network/share.doc"),
+            
+            // Root drive path (exactly 3 characters - edge case)
+            (r"C:\", "file:///C:/"),
+            (r"c:\", "file:///C:/"),
+            
+            // Mixed slashes
+            (r"C:\foo/bar\baz.html", "file:///C:/foo/bar/baz.html"),
+            (r"\\server/share\file.html", "file://server/share/file.html"),
+            
+            // Paths with dots
+            (r"C:\path\..\other\file.html", "file:///C:/path/../other/file.html"),
+            (r"C:\.\file.html", "file:///C:/file.html"),
+            
+            // Paths with encoded characters (treated as literals)
+            (r"C:\path%20with%20spaces.html", "file:///C:/path%2520with%2520spaces.html"),
+
+            // Paths with spaces
+            (r"C:\path with spaces.html", "file:///C:/path%20with%20spaces.html"),
+            (r"C:\path with spaces\file.html", "file:///C:/path%20with%20spaces/file.html")
+        ];
+
+        for (input, expected) in &test_cases {
+            let mut p = Policy::default();
+            p.allow_file_paths = false;
+            
+            let result = classify(input, &p);
+            assert!(matches!(result, Decision::Search { .. }),
+                "Expected Search for '{}' when allow_file_paths=false, got {:?}", input, result);
+            
+            p.allow_file_paths = true;
+            
+            let result = classify(input, &p);
+            match result {
+                Decision::Navigate { ref url } => {
+                    assert_eq!(url, expected,
+                        "Expected '{}' for input '{}', got '{}'", expected, input, url);
+                },
+                Decision::Search { ref query } => {
+                    panic!("Expected Navigate for '{}' when allow_file_paths=true, got Search with query '{}'", input, query);
+                }
+            }
         }
     }
 }

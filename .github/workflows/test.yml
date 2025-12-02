@@ -1,25 +1,14 @@
-name: Rust tests
+name: Tests
 
 on:
   push:
+    branches:
+      - develop
   pull_request:
 
 jobs:
-  test:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
+  test_apple:
+    uses: ./.github/workflows/test_apple.yml
 
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
-
-      - name: Run unit tests
-        env:
-          CARGO_TERM_COLOR: always
-        run: cargo test
-
-      - name: Run unit tests (with PSL)
-        env:
-          CARGO_TERM_COLOR: always
-        run: cargo test --features real-psl
+  test_windows:
+    uses: ./.github/workflows/test_windows.yml
