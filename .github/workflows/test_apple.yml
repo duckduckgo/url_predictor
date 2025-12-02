@@ -1,0 +1,29 @@
+name: Test Apple
+
+on:
+  workflow_call:
+
+concurrency:
+  group: apple-test-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Run unit tests
+        env:
+          CARGO_TERM_COLOR: always
+        run: cargo test
+
+      - name: Run unit tests (with PSL)
+        env:
+          CARGO_TERM_COLOR: always
+        run: cargo test --features real-psl
