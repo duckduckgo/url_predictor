@@ -1098,7 +1098,7 @@ mod tests {
                     assert_eq!(url, expected,
                         "Expected '{}' for input '{}', got '{}'", expected, input, url);
                 },
-                Decision::Search { ref query } => {
+                Decision::Search { ref query, .. } => {
                     panic!("Expected Navigate for '{}' when allow_file_paths=true, got Search with query '{}'", input, query);
                 }
             }
