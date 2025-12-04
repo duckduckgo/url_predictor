@@ -61,8 +61,26 @@ let decision = classify("duck ai translate hello", &policy);
 ```rust
 pub enum Decision {
     Navigate { url: String },
-    Search { query: String },
+    Search { 
+        query: String,
+        unknown_scheme_navigation: Option<String>,
+    },
 }
+```
+
+### `unknown_scheme_navigation`
+
+When the input looks like a valid URL but uses a scheme not in `allowed_schemes`, the `Search` variant includes `unknown_scheme_navigation` with the parsed URL. This lets the caller decide whether to offer navigation as an option.
+
+Examples:
+- `tel:+123456789` → `Search { query: "tel:+123456789", unknown_scheme_navigation: Some("tel:+123456789") }`
+- `spotify:track:123` → `Search { query: "spotify:track:123", unknown_scheme_navigation: Some("spotify:track:123") }`
+- `hello world` → `Search { query: "hello world", unknown_scheme_navigation: None }`
+
+In JSON, the field is omitted when `None`:
+```json
+{"Search":{"query":"tel:+123456789","unknown_scheme_navigation":"tel:+123456789"}}
+{"Search":{"query":"hello world"}}
 ```
 
 ---
