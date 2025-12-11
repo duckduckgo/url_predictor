@@ -18,6 +18,18 @@ use serde::{Deserialize, Serialize};
 use url::Url;
 
 
+/// Domains that should *always* be treated as NAVIGATE even if PSL
+/// considers them public suffixes (e.g. blogspot.com is a hosted-suffix).
+const ALWAYS_NAVIGATE_HOSTS: &[&str] = &[
+    "blogspot.com",
+    "github.io",
+    "herokuapp.com",
+    "cloudfront.net",
+    "githubusercontent.com",
+    // Add more here when needed:
+    // ...
+];
+
 // -----------------------------------------------------------------------------
 // Optional PSL backend (enabled with feature = "real-psl")
 // -----------------------------------------------------------------------------
@@ -283,10 +295,20 @@ fn classify_host_like(input: &str, policy: &Policy, db: &dyn SuffixDb) -> Option
     let host = u.host_str()?;
     let ascii_host = to_idna_ascii(host)?;
 
+    // filters out things that look like a host but are actually garbage
     if !host_like_valid(&ascii_host) {
         return None;
     }
 
+    // ...then check special hosts we should always navigate
+    let host_lc = ascii_host.to_ascii_lowercase();
+    if ALWAYS_NAVIGATE_HOSTS.contains(&host_lc.as_str()) {
+        return Some(Decision::Navigate {
+            url: u.to_string(),
+        });
+    }
+
+    // ...then the rest
     let is_ipv4 = ascii_host.parse::<Ipv4Addr>().is_ok();
     if is_ipv4 {
         let raw_host = input.split('/').next().unwrap_or(input);
@@ -1176,5 +1198,16 @@ mod tests {
             }
         }
     }
+
+    #[test]
+    fn known_bare_domains_are_navigate() {
+        let p = policy_default_inet();
+        assert!(matches!(classify("blogspot.com", &p),Decision::Navigate { .. }));
+        assert!(matches!(classify("github.io", &p),Decision::Navigate { .. }));
+        assert!(matches!(classify("herokuapp.com", &p),Decision::Navigate { .. }));
+        assert!(matches!(classify("githubusercontent.com", &p),Decision::Navigate { .. }));
+        assert!(matches!(classify("cloudfront.net", &p),Decision::Navigate { .. }));
+    }
+
 }
 
