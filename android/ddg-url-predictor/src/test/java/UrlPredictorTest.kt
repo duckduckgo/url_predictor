@@ -174,8 +174,7 @@ class UrlPredictorTests {
     fun `known bare domains navigate`() {
         assertTrue(classify("blogspot.com") is Decision.Navigate)
         assertTrue(classify("github.io") is Decision.Navigate)
-        assertTrue(classify("githubusercontent.com") is Decision.Navigate)
-        assertTrue(classify("herokuapp.com") is Decision.Navigate)
-        assertTrue(classify("cloudfront.net") is Decision.Navigate)
+        assertTrue(classify("gov.cz") is Decision.Navigate)
+        assertTrue(classify("gov.pl") is Decision.Navigate)
     }
 }

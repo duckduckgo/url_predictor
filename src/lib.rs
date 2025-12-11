@@ -17,18 +17,11 @@ use once_cell::sync::Lazy;
 use serde::{Deserialize, Serialize};
 use url::Url;
 
-
 /// Domains that should *always* be treated as NAVIGATE even if PSL
 /// considers them public suffixes (e.g. blogspot.com is a hosted-suffix).
-const ALWAYS_NAVIGATE_HOSTS: &[&str] = &[
-    "blogspot.com",
-    "github.io",
-    "herokuapp.com",
-    "cloudfront.net",
-    "githubusercontent.com",
-    // Add more here when needed:
-    // ...
-];
+mod generated_suffix_allowlist;
+use generated_suffix_allowlist::ALWAYS_NAVIGATE_SUFFIX_ROOTS;
+
 
 // -----------------------------------------------------------------------------
 // Optional PSL backend (enabled with feature = "real-psl")
@@ -302,7 +295,7 @@ fn classify_host_like(input: &str, policy: &Policy, db: &dyn SuffixDb) -> Option
 
     // ...then check special hosts we should always navigate
     let host_lc = ascii_host.to_ascii_lowercase();
-    if ALWAYS_NAVIGATE_HOSTS.contains(&host_lc.as_str()) {
+    if ALWAYS_NAVIGATE_SUFFIX_ROOTS.binary_search(&host_lc.as_str()).is_ok() {
         return Some(Decision::Navigate {
             url: u.to_string(),
         });
@@ -1204,10 +1197,23 @@ mod tests {
         let p = policy_default_inet();
         assert!(matches!(classify("blogspot.com", &p),Decision::Navigate { .. }));
         assert!(matches!(classify("github.io", &p),Decision::Navigate { .. }));
-        assert!(matches!(classify("herokuapp.com", &p),Decision::Navigate { .. }));
-        assert!(matches!(classify("githubusercontent.com", &p),Decision::Navigate { .. }));
-        assert!(matches!(classify("cloudfront.net", &p),Decision::Navigate { .. }));
+        assert!(matches!(classify("gov.cz", &p),Decision::Navigate { .. }));
     }
 
+    #[test]
+    fn suffix_root_allowlist_is_navigate() {
+        let p = policy_default_inet();
+
+        for host in crate::generated_suffix_allowlist::ALWAYS_NAVIGATE_SUFFIX_ROOTS {
+            let d = classify(host, &p);
+
+            assert!(
+                matches!(d, Decision::Navigate { .. }),
+                "expected Navigate for allowlisted suffix root '{}', got {:?}",
+                host,
+                d,
+            );
+        }
+    }
 }
 
