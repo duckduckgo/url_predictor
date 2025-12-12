@@ -186,6 +186,44 @@ cd android
 
 ---
 
+## Updating the Public Suffix List
+
+Fetch the latest PSL copy (writes to `assets/public_suffix_list.dat`):
+
+```sh
+./scripts/update_psl.sh
+```
+
+After updating the PSL you should regenerate the Root Allowlist Generator. See next section.
+
+## Suffix Root Allowlist Generator
+
+The URL predictor keeps a list of public-suffix roots that should always count as “navigate” candidates (e.g., `blogspot.com`). That list lives in `src/generated_suffix_allowlist.rs` as `ALWAYS_NAVIGATE_SUFFIX_ROOTS` and is produced by `tools/generate_suffix_root_allowlist.py`.
+
+What the script does:
+- Reads a `public_suffix_list.dat` (the repo ships one at `assets/public_suffix_list.dat`).
+- For each multi-label suffix root, probes `https://` / `http://` and keeps domains that return HTML. (This touches the network and can take a while.)
+- Writes the allowlist as Rust plus optional JSON/debug artifacts.
+
+Typical regeneration (updates the Rust module, a JSON copy, and per-domain diagnostics):
+
+```sh
+python tools/generate_suffix_root_allowlist.py \
+  --psl assets/public_suffix_list.dat \
+  --rust-out src/generated_suffix_allowlist.rs \
+  --json-out data/suffix_root_allowlist.json \
+  --debug-out data/suffix_root_debug.json
+```
+
+Outputs:
+- `src/generated_suffix_allowlist.rs`: Rust module consumed at runtime.
+- `data/suffix_root_allowlist.json`: plain list of allowed roots (helpful for inspection).
+- `data/suffix_root_debug.json`: map of every checked domain to its HTTP result for troubleshooting.
+
+Use `--max-workers` to tune parallelism or `--limit` for quick spot checks while iterating.
+
+---
+
 ## Notes
 
 - The included `DemoSuffixDb` is intentionally tiny. For production, enable the `real-psl` feature and ship a PSL file.  

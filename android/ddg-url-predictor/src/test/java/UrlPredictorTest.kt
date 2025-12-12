@@ -166,4 +166,15 @@ class UrlPredictorTests {
         val d = classify("mailto:test@yahoo.com")
         assertTrue(d is Decision.Navigate)
     }
+
+    // ------------------------------------------------------------------------
+    // known bare domains
+    // ------------------------------------------------------------------------
+    @Test
+    fun `known bare domains navigate`() {
+        assertTrue(classify("blogspot.com") is Decision.Navigate)
+        assertTrue(classify("github.io") is Decision.Navigate)
+        assertTrue(classify("gov.cz") is Decision.Navigate)
+        assertTrue(classify("gov.pl") is Decision.Navigate)
+    }
 }
