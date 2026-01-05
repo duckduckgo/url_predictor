@@ -368,48 +368,89 @@ fn ip_or_localhost_navigate(input: &str) -> Option<Decision> {
         None => (s, None),
     };
 
-    let (host_part, _port_part) = if authority.starts_with('[') {
-        if let Some(end) = authority.find(']') {
-            let host = &authority[1..end];
-            let after = &authority[end + 1..];
-            let _port = after.strip_prefix(':');
-            (host, _port)
+    fn parse_ipv6_with_zone(host: &str) -> Option<String> {
+        let (decoded, already_encoded) = if host.contains("%25") {
+            (host.replace("%25", "%"), true)
+        } else {
+            (host.to_string(), false)
+        };
+
+        if let Some((ip_part, zone)) = decoded.split_once('%') {
+            if ip_part.parse::<std::net::Ipv6Addr>().is_ok() {
+                if already_encoded {
+                    return Some(host.to_string());
+                }
+                return Some(format!("{ip_part}%25{zone}"));
+            }
+            return None;
+        }
+
+        if decoded.parse::<std::net::Ipv6Addr>().is_ok() {
+            return Some(host.to_string());
+        }
+
+        None
+    }
+
+    let mut host: Option<String> = None;
+    let mut port: Option<&str> = None;
+    let mut is_ipv6 = false;
+
+    if authority.starts_with('[') {
+        let end = authority.find(']')?;
+        let host_literal = &authority[1..end];
+        let after = &authority[end + 1..];
+        let host_v6 = parse_ipv6_with_zone(host_literal)?;
+        host = Some(host_v6);
+        is_ipv6 = true;
+
+        if let Some(p) = after.strip_prefix(':') {
+            if p.is_empty() || !p.chars().all(|c| c.is_ascii_digit()) {
+                return None;
+            }
+            port = Some(p);
+        } else if !after.is_empty() {
+            return None;
+        }
+    } else if authority.eq_ignore_ascii_case("localhost") {
+        host = Some(authority.to_string());
+    } else if let Ok(ip) = authority.parse::<std::net::IpAddr>() {
+        host = Some(authority.to_string());
+        is_ipv6 = matches!(ip, std::net::IpAddr::V6(_));
+    } else if let Some(host_v6) = parse_ipv6_with_zone(authority) {
+        host = Some(host_v6);
+        is_ipv6 = true;
+    } else if let Some((h, p)) = authority.rsplit_once(':') {
+        if p.is_empty() || !p.chars().all(|c| c.is_ascii_digit()) {
+            return None;
+        }
+        if h.eq_ignore_ascii_case("localhost") {
+            host = Some(h.to_string());
+        } else if let Ok(ip) = h.parse::<std::net::IpAddr>() {
+            if matches!(ip, std::net::IpAddr::V6(_)) {
+                return None;
+            }
+            host = Some(h.to_string());
         } else {
             return None;
         }
+        port = Some(p);
     } else {
-        match authority.rsplit_once(':') {
-            Some((h, p)) if !p.is_empty() && p.chars().all(|c| c.is_ascii_digit()) => (h, Some(p)),
-            _ => (authority, None),
-        }
-    };
+        return None;
+    }
 
-    let host = host_part;
-
-    if host.eq_ignore_ascii_case("localhost") || host.parse::<std::net::IpAddr>().is_ok() {
+    if let Some(host) = host {
         let mut url = String::from("http://");
-        if host.contains(':') && !host.starts_with('[') {
+        if is_ipv6 {
             url.push('[');
-            url.push_str(host);
+            url.push_str(&host);
             url.push(']');
         } else {
-            url.push_str(host);
+            url.push_str(&host);
         }
-        if authority.contains(':') && !authority.starts_with('[') {
-            if let Some((_, p)) = authority.rsplit_once(':') {
-                if !p.is_empty() && p.chars().all(|c| c.is_ascii_digit()) {
-                    url.push(':');
-                    url.push_str(p);
-                }
-            }
-        } else if authority.starts_with('[') {
-            if let Some(end) = authority.find(']') {
-                let after = &authority[end + 1..];
-                if let Some(port) = after.strip_prefix(':') {
-                    url.push(':');
-                    url.push_str(port);
-                }
-            }
+        if let Some(p) = port {
+            url.push(':');
+            url.push_str(p);
         }
         if let Some(r) = rest {
             url.push('/');
@@ -962,107 +1003,114 @@ mod tests {
     #[test]
     fn ipv6_formats() {
         let p = policy_default_inet();
-        
-        // IPv6 format variations
-        let ipv6_formats = [
-            // 1. Standard Full Representation (Canonical)
-            // 8 groups of 4 hexadecimal digits, including leading zeros.
+        let ipv6_basic_formats = [
             "2001:0db8:85a3:0000:0000:8a2e:0370:7334",
-
-            // 2. Leading Zeros Omitted
-            // Zeros at the start of any group are removed.
             "2001:db8:85a3:0:0:8a2e:370:7334",
-
-            // 3. Compressed (Double Colon)
-            // Continuous blocks of zeros are replaced by '::'. Used in the middle.
             "2001:db8:85a3::8a2e:370:7334",
-
-            // 4. Leading Compression
-            // The address starts with zeros, replaced by '::'.
             "::8a2e:370:7334",
-
-            // 5. Trailing Compression
-            // The address ends with zeros, replaced by '::'.
             "2001:db8:85a3::",
-
-            // 6. Unspecified Address
-            // Represents 0.0.0.0 in IPv6 (absence of an address).
             "::",
-
-            // 7. Loopback Address (Compressed)
-            // Represents localhost (127.0.0.1).
             "::1",
-
-            // 8. Loopback Address (Full)
-            // The non-compressed version of localhost.
             "0000:0000:0000:0000:0000:0000:0000:0001",
-
-            // 9. IPv4-Mapped IPv6 Address
-            // Used by dual-stack software; the last 32 bits are decimal.
             "::ffff:192.168.1.1",
-
-            // 10. IPv4-Compatible IPv6 Address (Deprecated)
-            // Older format, rarely used now, but syntactically valid.
             "::192.168.1.1",
-
-            // Currently not supported
-
-            // 11. Link-Local with Zone ID (Linux/Unix)
-            // Includes the '%' separator and the interface name (Scope ID).
-            //"fe80::1ff:fe23:4567:890a%eth0",
-
-            // 12. Link-Local with Zone ID (Windows)
-            // Includes the '%' separator and the numeric interface index.
-            //"fe80::1ff:fe23:4567:890a%3",
-
-            // 13. CIDR Notation (Network Prefix)
-            // Address followed by '/' and the routing prefix length.
-            //"2001:db8:abcd:0012::0/64",
         ];
 
-        // Test cases that are currently not supported
-        let disabled_test_cases = vec![
-            "2001:0db8:85a3:0000:0000:8a2e:0370:7334",
-            "2001:db8:85a3:0:0:8a2e:370:7334",
-            "::1",
-            "0000:0000:0000:0000:0000:0000:0000:0001",
-        ];
-
-        // Generate test cases
-        let test_cases: Vec<String> = ipv6_formats
-            .iter()
-            .flat_map(|ip| {
-                vec![
-                    ip.to_string(),
-                    format!("[{ip}]"),
-                    format!("[{ip}]:80"),
-                    format!("http://[{ip}]"),
-                    format!("http://[{ip}]:80"),
-                ]
-            })
-            .collect();
-
-        // Filter out disabled test cases
-        let enabled_test_cases: Vec<&String> = test_cases
-            .iter()
-            .filter(|tc| !disabled_test_cases.contains(&tc.as_str()))
-            .collect();
-
-        // Collect all failures instead of stopping at the first one
         let mut failures = Vec::new();
-        for test_case in &enabled_test_cases {
-            let result = classify(test_case, &p);
-            if !matches!(result, Decision::Navigate { .. }) {
-                failures.push(format!("  - Input: '{}' -> Result: {:?}", test_case, result));
+        for ip in ipv6_basic_formats {
+            let variants = [
+                ip.to_string(),
+                format!("[{ip}]"),
+                format!("[{ip}]:80"),
+                format!("http://[{ip}]"),
+                format!("http://[{ip}]:80"),
+            ];
+            for input in variants {
+                let result = classify(&input, &p);
+                if !matches!(result, Decision::Navigate { .. }) {
+                    failures.push(format!("  - Input: '{}' -> Result: {:?}", input, result));
+                }
             }
         }
 
-        // Report all failures at once
+        let unbracketed_expected = [
+            (
+                "2001:0db8:85a3:0000:0000:8a2e:0370:7334",
+                "http://[2001:0db8:85a3:0000:0000:8a2e:0370:7334]/",
+            ),
+            (
+                "2001:db8:85a3:0:0:8a2e:370:7334",
+                "http://[2001:db8:85a3:0:0:8a2e:370:7334]/",
+            ),
+            ("::1", "http://[::1]/"),
+            (
+                "0000:0000:0000:0000:0000:0000:0000:0001",
+                "http://[0000:0000:0000:0000:0000:0000:0000:0001]/",
+            ),
+            (
+                "2001:db8:85a3::8a2e:370:7334",
+                "http://[2001:db8:85a3::8a2e:370:7334]/",
+            ),
+        ];
+        for (input, expected) in unbracketed_expected {
+            match classify(input, &p) {
+                Decision::Navigate { ref url } => {
+                    assert_eq!(url, expected, "Expected '{}' for input '{}', got '{}'", expected, input, url);
+                }
+                Decision::Search { ref query, .. } => {
+                    panic!("Expected Navigate for '{}', got Search with query '{}'", input, query);
+                }
+            }
+        }
+
+        let zone_cases = [
+            (
+                "fe80::1ff:fe23:4567:890a%eth0",
+                "http://[fe80::1ff:fe23:4567:890a%25eth0]/",
+            ),
+            (
+                "fe80::1ff:fe23:4567:890a%3",
+                "http://[fe80::1ff:fe23:4567:890a%253]/",
+            ),
+            (
+                "[fe80::1ff:fe23:4567:890a%eth0]",
+                "http://[fe80::1ff:fe23:4567:890a%25eth0]/",
+            ),
+            (
+                "[fe80::1ff:fe23:4567:890a%eth0]:80",
+                "http://[fe80::1ff:fe23:4567:890a%25eth0]:80/",
+            ),
+            (
+                "[fe80::1ff:fe23:4567:890a%25eth0]",
+                "http://[fe80::1ff:fe23:4567:890a%25eth0]/",
+            ),
+        ];
+        for (input, expected) in zone_cases {
+            match classify(input, &p) {
+                Decision::Navigate { ref url } => {
+                    assert_eq!(url, expected, "Expected '{}' for input '{}', got '{}'", expected, input, url);
+                }
+                Decision::Search { ref query, .. } => {
+                    panic!("Expected Navigate for '{}', got Search with query '{}'", input, query);
+                }
+            }
+        }
+
+        let cidr_like = "2001:db8:abcd:0012::0/64";
+        let cidr_expected = "http://[2001:db8:abcd:0012::0]/64";
+        match classify(cidr_like, &p) {
+            Decision::Navigate { ref url } => {
+                assert_eq!(url, cidr_expected, "Expected '{}' for input '{}', got '{}'", cidr_expected, cidr_like, url);
+            }
+            Decision::Search { ref query, .. } => {
+                panic!("Expected Navigate for '{}', got Search with query '{}'", cidr_like, query);
+            }
+        }
+
         if !failures.is_empty() {
             panic!(
-                "IPv6 test failures ({} out of {} cases):\n{}",
+                "IPv6 test failures ({} cases):\n{}",
                 failures.len(),
-                enabled_test_cases.len(),
                 failures.join("\n")
             );
         }
@@ -1216,4 +1264,3 @@ mod tests {
         }
     }
 }
-
