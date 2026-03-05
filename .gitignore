@@ -37,6 +37,11 @@ android/ddg-url-predictor/src/main/jniLibs/
 android/ddg-url-predictor/src/test/resources/
 
 # =========================
+# Claude Code
+# =========================
+.claude/
+
+# =========================
 # Misc / OS
 # =========================
 .DS_Store
