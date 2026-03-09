@@ -211,6 +211,13 @@ pub fn classify_with_db(input: &str, policy: &Policy, db: &dyn SuffixDb) -> Deci
         return Decision::Search { query: String::new(), unknown_scheme_navigation: None };
     }
 
+    // Embedded newlines/tabs are silently stripped by the `url` crate during parsing,
+    // which can cause inputs like "https://bbc.com\ntest" to be misclassified as Navigate.
+    // Reject them as Search before reaching the URL parser.
+    if original.contains('\n') || original.contains('\r') || original.contains('\t') {
+        return Decision::Search { query: original.to_string(), unknown_scheme_navigation: None };
+    }
+
     // Check for absolute URL - track unknown schema for possible use at end
     let unknown_scheme_navigation = match parse_absolute_url(original, policy) {
         AbsoluteUrlResult::Allowed(url) => return Decision::Navigate { url },
@@ -828,7 +835,11 @@ mod tests {
         assert!(matches!(classify("https://duckduckgo.com/?q=search+string+with+spaces", &p), Decision::Navigate { url } if url == "https://duckduckgo.com/?q=search+string+with+spaces"));
         assert!(matches!(classify("https://screwjankgames.github.io/engine programming/2020/09/24/writing-your.html", &p), Decision::Navigate { url } if url == "https://screwjankgames.github.io/engine%20programming/2020/09/24/writing-your.html"));
         assert!(matches!(classify("define: foo", &p), Decision::Search { query, unknown_scheme_navigation: None } if query == "define: foo"));
-        assert!(matches!(classify("   http://example.com\n", &p), Decision::Navigate { url } if url == "http://example.com/"));
+        assert!(matches!(classify("   http://example.com\n", &p), Decision::Navigate { url } if url == "http://example.com/")); // trailing newline stripped by trim → Navigate
+        assert!(matches!(classify("https://bbc.com\ntest", &p), Decision::Search { .. })); // embedded newline → Search
+        assert!(matches!(classify("bbc.com\ntest", &p), Decision::Search { .. })); // embedded newline, no scheme → Search
+        assert!(matches!(classify("https://bbc.com\rtest", &p), Decision::Search { .. })); // embedded CR → Search
+        assert!(matches!(classify("https://bbc.com\ttest", &p), Decision::Search { .. })); // embedded tab → Search
         assert!(matches!(classify(" duckduckgo.com", &p), Decision::Navigate { url } if url == "http://duckduckgo.com/"));
         assert!(matches!(classify(" duck duck go.c ", &p), Decision::Search { query, unknown_scheme_navigation: None } if query == "duck duck go.c"));
         assert!(matches!(classify("localhost ", &p), Decision::Navigate { url } if url == "http://localhost/"));
