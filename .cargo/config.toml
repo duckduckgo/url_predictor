@@ -1,0 +1,6 @@
+# Statically link the MSVC C runtime so the produced *.dll files do not depend on
+# vcruntime140.dll (delivered via the Microsoft.VCLibs framework package on Windows).
+# Scoped to MSVC targets only, so Android (*-linux-android) and Apple (*-apple-*)
+# cross-builds are unaffected.
+[target.'cfg(target_env = "msvc")']
+rustflags = ["-C", "target-feature=+crt-static"]
