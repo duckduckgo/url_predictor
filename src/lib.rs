@@ -9,8 +9,8 @@
 
 use std::collections::{BTreeSet, HashSet};
 use std::ffi::{CStr, CString};
-use std::os::raw::c_char;
 use std::net::Ipv4Addr;
+use std::os::raw::c_char;
 
 use idna::domain_to_ascii;
 use once_cell::sync::Lazy;
@@ -21,7 +21,6 @@ use url::Url;
 /// considers them public suffixes (e.g. blogspot.com is a hosted-suffix).
 mod generated_suffix_allowlist;
 use generated_suffix_allowlist::ALWAYS_NAVIGATE_SUFFIX_ROOTS;
-
 
 // -----------------------------------------------------------------------------
 // Optional PSL backend (enabled with feature = "real-psl")
@@ -117,7 +116,17 @@ pub struct Policy {
 impl Default for Policy {
     fn default() -> Self {
         let mut allowed = BTreeSet::new();
-        for s in ["http", "https", "ftp", "file", "about", "view-source", "duck", "edge", "chrome"] {
+        for s in [
+            "http",
+            "https",
+            "ftp",
+            "file",
+            "about",
+            "view-source",
+            "duck",
+            "edge",
+            "chrome",
+        ] {
             allowed.insert(s.to_string());
         }
         Self {
@@ -147,20 +156,26 @@ pub struct DemoSuffixDb {
 impl DemoSuffixDb {
     pub fn new() -> Self {
         let icann: HashSet<String> = [
-            "com","org","net","edu","gov","mil","int","info","io","co",
-            "uk","pt","de","fr","es","it","ru","cn","jp","br","in","test"
+            "com", "org", "net", "edu", "gov", "mil", "int", "info", "io", "co", "uk", "pt", "de",
+            "fr", "es", "it", "ru", "cn", "jp", "br", "in", "test",
         ]
-        .into_iter().map(|s| s.to_string()).collect();
+        .into_iter()
+        .map(|s| s.to_string())
+        .collect();
 
         let private: HashSet<String> = ["appspot.com", "github.io", "pages.dev"]
-            .into_iter().map(|s| s.to_string()).collect();
+            .into_iter()
+            .map(|s| s.to_string())
+            .collect();
 
         Self { icann, private }
     }
 }
 
 impl Default for DemoSuffixDb {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl SuffixDb for DemoSuffixDb {
@@ -180,7 +195,7 @@ impl SuffixDb for DemoSuffixDb {
             return true;
         }
         if allow_private && labels.len() >= 2 {
-            let last2 = format!("{}.{}", labels[labels.len()-2], labels[labels.len()-1]);
+            let last2 = format!("{}.{}", labels[labels.len() - 2], labels[labels.len() - 1]);
             return self.private.contains(&last2);
         }
         false
@@ -208,14 +223,20 @@ pub fn classify(input: &str, policy: &Policy) -> Decision {
 pub fn classify_with_db(input: &str, policy: &Policy, db: &dyn SuffixDb) -> Decision {
     let original = input.trim();
     if original.is_empty() {
-        return Decision::Search { query: String::new(), unknown_scheme_navigation: None };
+        return Decision::Search {
+            query: String::new(),
+            unknown_scheme_navigation: None,
+        };
     }
 
     // Embedded newlines/tabs are silently stripped by the `url` crate during parsing,
     // which can cause inputs like "https://bbc.com\ntest" to be misclassified as Navigate.
     // Reject them as Search before reaching the URL parser.
     if original.contains('\n') || original.contains('\r') || original.contains('\t') {
-        return Decision::Search { query: original.to_string(), unknown_scheme_navigation: None };
+        return Decision::Search {
+            query: original.to_string(),
+            unknown_scheme_navigation: None,
+        };
     }
 
     // Check for absolute URL - track unknown schema for possible use at end
@@ -244,9 +265,12 @@ pub fn classify_with_db(input: &str, policy: &Policy, db: &dyn SuffixDb) -> Deci
         }
     }
 
-    // Whitespace → search
+    // Whitespace => search
     if original.split_whitespace().count() > 1 {
-        return Decision::Search { query: original.to_string(), unknown_scheme_navigation: None };
+        return Decision::Search {
+            query: original.to_string(),
+            unknown_scheme_navigation: None,
+        };
     }
 
     // Host-like?
@@ -255,7 +279,10 @@ pub fn classify_with_db(input: &str, policy: &Policy, db: &dyn SuffixDb) -> Deci
     }
 
     // Fallback
-    Decision::Search { query: original.to_string(), unknown_scheme_navigation }
+    Decision::Search {
+        query: original.to_string(),
+        unknown_scheme_navigation,
+    }
 }
 
 // -----------------------------------------------------------------------------
@@ -274,7 +301,10 @@ fn parse_absolute_url(input: &str, policy: &Policy) -> AbsoluteUrlResult {
         if is_valid_scheme(scheme) {
             if let Ok(u) = Url::parse(input) {
                 let normalized = u.to_string();
-                if policy.allowed_schemes.contains(&scheme.to_ascii_lowercase()) {
+                if policy
+                    .allowed_schemes
+                    .contains(&scheme.to_ascii_lowercase())
+                {
                     return AbsoluteUrlResult::Allowed(normalized);
                 } else {
                     return AbsoluteUrlResult::UnknownSchema(normalized);
@@ -302,10 +332,11 @@ fn classify_host_like(input: &str, policy: &Policy, db: &dyn SuffixDb) -> Option
 
     // ...then check special hosts we should always navigate
     let host_lc = ascii_host.to_ascii_lowercase();
-    if ALWAYS_NAVIGATE_SUFFIX_ROOTS.binary_search(&host_lc.as_str()).is_ok() {
-        return Some(Decision::Navigate {
-            url: u.to_string(),
-        });
+    if ALWAYS_NAVIGATE_SUFFIX_ROOTS
+        .binary_search(&host_lc.as_str())
+        .is_ok()
+    {
+        return Some(Decision::Navigate { url: u.to_string() });
     }
 
     // ...then the rest
@@ -313,9 +344,9 @@ fn classify_host_like(input: &str, policy: &Policy, db: &dyn SuffixDb) -> Option
     if is_ipv4 {
         let raw_host = input.split('/').next().unwrap_or(input);
         // If the parsed host is a valid IPv4 address, but the host extracted from raw input is not,
-        // then the raw input was filled with `0` octets - we don't want it unless the input contains a scheme,
-        // otherwise we treat it as a search query.
-        if !raw_host.parse::<Ipv4Addr>().is_ok() {
+        // then the raw input was filled with `0` octets - we don't want it unless the input
+        // contains a scheme, otherwise we treat it as a search query.
+        if raw_host.parse::<Ipv4Addr>().is_err() {
             return None;
         }
     }
@@ -347,8 +378,7 @@ fn classify_host_like(input: &str, policy: &Policy, db: &dyn SuffixDb) -> Option
         }
     }
 
-    if ascii_host.starts_with("www.") {
-        let rest = &ascii_host[4..];
+    if let Some(rest) = ascii_host.strip_prefix("www.") {
         if rest.contains('.') && db.has_known_suffix(rest, policy.allow_private_suffix) {
             return Some(Decision::Navigate { url: u.to_string() });
         }
@@ -399,7 +429,7 @@ fn ip_or_localhost_navigate(input: &str) -> Option<Decision> {
         None
     }
 
-    let mut host: Option<String> = None;
+    let host: Option<String>;
     let mut port: Option<&str> = None;
     let mut is_ipv6 = false;
 
@@ -520,7 +550,7 @@ fn host_like_valid(host: &str) -> bool {
 }
 
 fn is_file_path(input: &str) -> Option<String> {
-    if let Ok(u) = Url::from_file_path(&input) {
+    if let Ok(u) = Url::from_file_path(input) {
         Some(u.to_string())
     } else {
         None
@@ -566,9 +596,16 @@ mod psl_buf {
 /// - `input` and `policy_json` must be valid pointers to NUL-terminated byte strings.
 /// - The returned pointer must be freed only via [`ddg_up_free_string`].
 #[no_mangle]
-pub extern "C" fn ddg_up_classify_json(input: *const c_char, policy_json: *const c_char) -> *mut c_char {
-    let input = unsafe { CStr::from_ptr(input) }.to_string_lossy().to_string();
-    let policy_json = unsafe { CStr::from_ptr(policy_json) }.to_string_lossy().to_string();
+pub unsafe extern "C" fn ddg_up_classify_json(
+    input: *const c_char,
+    policy_json: *const c_char,
+) -> *mut c_char {
+    let input = unsafe { CStr::from_ptr(input) }
+        .to_string_lossy()
+        .to_string();
+    let policy_json = unsafe { CStr::from_ptr(policy_json) }
+        .to_string_lossy()
+        .to_string();
 
     let policy: Policy = match serde_json::from_str(&policy_json) {
         Ok(p) => p,
@@ -592,9 +629,13 @@ pub extern "C" fn ddg_up_classify_json(input: *const c_char, policy_json: *const
 /// - `ptr` must be a pointer previously returned by this library.
 ///   Do **not** pass a pointer from `malloc`/`new`/stack.
 #[no_mangle]
-pub extern "C" fn ddg_up_free_string(ptr: *mut c_char) {
-    if ptr.is_null() { return; }
-    unsafe { let _ = CString::from_raw(ptr); }
+pub unsafe extern "C" fn ddg_up_free_string(ptr: *mut c_char) {
+    if ptr.is_null() {
+        return;
+    }
+    unsafe {
+        let _ = CString::from_raw(ptr);
+    }
 }
 
 /// Get a pointer to the in-memory Public Suffix List (PSL) bytes.
@@ -610,7 +651,7 @@ pub extern "C" fn ddg_up_free_string(ptr: *mut c_char) {
 /// `*const c_char` pointing to a read-only, NUL-terminated buffer.
 #[cfg(feature = "real-psl")]
 #[no_mangle]
-pub extern "C" fn ddg_up_get_psl_ptr() -> *const c_char {
+pub unsafe extern "C" fn ddg_up_get_psl_ptr() -> *const c_char {
     psl_buf::buf_with_trailing_nul().as_ptr() as *const c_char
 }
 
@@ -622,18 +663,17 @@ pub extern "C" fn ddg_up_get_psl_ptr() -> *const c_char {
 /// `usize` length in bytes.
 #[cfg(feature = "real-psl")]
 #[no_mangle]
-pub extern "C" fn ddg_up_get_psl_len() -> usize {
+pub unsafe extern "C" fn ddg_up_get_psl_len() -> usize {
     // length *excluding* the trailing NUL
     psl_buf::buf_with_trailing_nul().len().saturating_sub(1)
 }
-
 
 // -----------------------------------------------------------------------------
 // JNI (Android only)
 // -----------------------------------------------------------------------------
 #[cfg(any(target_os = "android", feature = "jni-host-tests"))]
 #[no_mangle]
-pub extern "system" fn Java_com_duckduckgo_urlpredictor_UrlPredictor_ddgClassifyJni(
+pub unsafe extern "system" fn Java_com_duckduckgo_urlpredictor_UrlPredictor_ddgClassifyJni(
     mut env: jni::JNIEnv,
     _class: jni::objects::JClass,
     jinput: jni::objects::JString,
@@ -644,8 +684,8 @@ pub extern "system" fn Java_com_duckduckgo_urlpredictor_UrlPredictor_ddgClassify
     let policy: Policy = serde_json::from_str(&policy_json).unwrap_or_default();
 
     let decision = classify(&input, &policy);
-    let json = serde_json::to_string(&decision)
-        .unwrap_or_else(|_| "{\"Search\":{\"query\":\"\"}}".into());
+    let json =
+        serde_json::to_string(&decision).unwrap_or_else(|_| "{\"Search\":{\"query\":\"\"}}".into());
     env.new_string(json).unwrap().into_raw()
 }
 
@@ -655,86 +695,74 @@ pub extern "system" fn Java_com_duckduckgo_urlpredictor_UrlPredictor_ddgClassify
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::assert_matches;
 
     fn policy_default_inet() -> Policy {
-        let p = Policy::default();
-        p
+        Policy::default()
     }
 
     #[test]
     fn absolute_urls() {
         let p = policy_default_inet();
-        assert!(matches!(
+        assert_matches!(
             classify("https://例え.テスト/path?q=1", &p),
             Decision::Navigate { .. }
-        ));
-        assert!(matches!(
+        );
+        assert_matches!(
             classify("view-source:https://example.com", &p),
             Decision::Navigate { .. }
-        ));
+        );
     }
 
     #[test]
     fn scheme_relative() {
         let p = policy_default_inet();
         let d = classify("//example.com/path", &p);
-        assert!(matches!(d, Decision::Navigate { .. }));
+        assert_matches!(d, Decision::Navigate { .. });
     }
 
     #[test]
     fn ip_and_localhost() {
         let p = policy_default_inet();
-        assert!(matches!(
-            classify("127.0.0.1", &p),
-            Decision::Navigate { .. }
-        ));
-        assert!(matches!(
-            classify("127.0.0.1:3000/", &p),
-            Decision::Navigate { .. }
-        ));
-        assert!(matches!(
-            classify("[2001:db8::1]/a", &p),
-            Decision::Navigate { .. }
-        ));
-        assert!(matches!(
+        assert_matches!(classify("127.0.0.1", &p), Decision::Navigate { .. });
+        assert_matches!(classify("127.0.0.1:3000/", &p), Decision::Navigate { .. });
+        assert_matches!(classify("[2001:db8::1]/a", &p), Decision::Navigate { .. });
+        assert_matches!(
             classify("localhost:8080/health", &p),
             Decision::Navigate { .. }
-        ));
+        );
     }
 
     #[test]
     fn search_bias() {
         let p = policy_default_inet();
-        assert!(matches!(
+        assert_matches!(
             classify("node.js tutorial", &p),
             Decision::Search { query, unknown_scheme_navigation: None } if query == "node.js tutorial"
-        ));
-        assert!(matches!(
+        );
+        assert_matches!(
             classify("what.is my ip", &p),
             Decision::Search { query, unknown_scheme_navigation: None } if query == "what.is my ip"
-        ));
-        assert!(matches!(
+        );
+        assert_matches!(
             classify("something.orother", &p),
             Decision::Search { query, unknown_scheme_navigation: None } if query == "something.orother"
-        ));
+        );
     }
 
     #[test]
     fn search_bias_with_allow_intranet_multi_label() {
         let mut p = policy_default_inet();
         p.allow_intranet_multi_label = true;
-        assert!(matches!(
+        assert_matches!(
             classify("node.js tutorial", &p),
             Decision::Search { query, unknown_scheme_navigation: None } if query == "node.js tutorial"
-        ));
-        assert!(matches!(
+        );
+        assert_matches!(
             classify("what.is my ip", &p),
             Decision::Search { query, unknown_scheme_navigation: None } if query == "what.is my ip"
-        ));
-        assert!(matches!(
-            classify("something.orother", &p),
-            Decision::Navigate { .. }
-        ));
+        );
+        assert_matches!(classify("something.orother", &p), Decision::Navigate { .. });
     }
 
     #[test]
@@ -742,150 +770,242 @@ mod tests {
         let mut p = policy_default_inet();
         p.allow_intranet_single_label = false;
         let d = classify("example.com", &p);
-        assert!(matches!(d, Decision::Navigate { .. }));
+        assert_matches!(d, Decision::Navigate { .. });
 
         let d = classify("www.test", &p); // no PSL
-        assert!(matches!(d, Decision::Navigate { .. }));
+        assert_matches!(d, Decision::Navigate { .. });
 
         let d = classify("foo.github.io", &p); // private suffix demo
-        assert!(matches!(d, Decision::Navigate { .. }));
+        assert_matches!(d, Decision::Navigate { .. });
     }
 
     #[test]
     fn intranet_single_label_policy() {
         let mut p = policy_default_inet();
         p.allow_intranet_single_label = false;
-        assert!(matches!(classify("dev", &p), Decision::Search { query, unknown_scheme_navigation: None } if query == "dev"));
+        assert_matches!(classify("dev", &p),
+            Decision::Search { query, unknown_scheme_navigation: None } if query == "dev");
         p.allow_intranet_single_label = true;
-        assert!(matches!(classify("dev", &p), Decision::Navigate { .. }));
+        assert_matches!(classify("dev", &p), Decision::Navigate { .. });
         // single label with port navigates even if policy disallows
         p.allow_intranet_single_label = false;
-        assert!(matches!(
-            classify("dev:5173", &p),
-            Decision::Navigate { .. }
-        ));
+        assert_matches!(classify("dev:5173", &p), Decision::Navigate { .. });
     }
 
     #[test]
     fn intranet_multi_label_policy() {
-        let mut p = Policy::default();
-        p.allow_intranet_multi_label = true;
-        assert!(matches!(classify("nas.local", &p), Decision::Navigate { url } if url == "http://nas.local/"));
-        assert!(matches!(classify("nas.local:5000", &p), Decision::Navigate { url } if url == "http://nas.local:5000/"));
-        assert!(matches!(classify("nas.local/login", &p), Decision::Navigate { url } if url == "http://nas.local/login"));
-        assert!(matches!(classify("package.json", &p), Decision::Navigate { url } if url == "http://package.json/"));
+        let p = Policy {
+            allow_intranet_multi_label: true,
+            ..Default::default()
+        };
+
+        assert_matches!(classify("nas.local", &p),
+            Decision::Navigate { url } if url == "http://nas.local/");
+        assert_matches!(classify("nas.local:5000", &p),
+            Decision::Navigate { url } if url == "http://nas.local:5000/");
+        assert_matches!(classify("nas.local/login", &p),
+            Decision::Navigate { url } if url == "http://nas.local/login");
+        assert_matches!(classify("package.json", &p),
+            Decision::Navigate { url } if url == "http://package.json/");
     }
 
     #[test]
     fn ports_and_userinfo() {
         let p = Policy::default();
-        assert!(matches!(classify("example.com:80", &p), Decision::Navigate { .. }));
+        assert_matches!(classify("example.com:80", &p), Decision::Navigate { .. });
         // example.com:abc parses as URL with scheme "example.com" (dots allowed in schemes per RFC 3986)
-        assert!(matches!(classify("example.com:abc", &p), Decision::Search { query, unknown_scheme_navigation: Some(ref url) } if query == "example.com:abc" && url == "example.com:abc"));
-        assert!(matches!(classify("http://user:pass@example.com", &p), Decision::Navigate { .. }));
-        assert!(matches!(classify("http://user:@example.com", &p), Decision::Navigate { url } if url == "http://user@example.com/"));
-        assert!(matches!(classify("user:pass@example.com", &p), Decision::Navigate { .. }));
-        assert!(matches!(classify("user@example.com", &p), Decision::Search { query, unknown_scheme_navigation: None } if query == "user@example.com"));
+        assert_matches!(classify("example.com:abc", &p),
+            Decision::Search { query, unknown_scheme_navigation: Some(ref url) }
+            if query == "example.com:abc" && url == "example.com:abc");
+        assert_matches!(
+            classify("http://user:pass@example.com", &p),
+            Decision::Navigate { .. }
+        );
+        assert_matches!(classify("http://user:@example.com", &p),
+            Decision::Navigate { url } if url == "http://user@example.com/");
+        assert_matches!(
+            classify("user:pass@example.com", &p),
+            Decision::Navigate { .. }
+        );
+        assert_matches!(classify("user@example.com", &p),
+            Decision::Search { query, unknown_scheme_navigation: None } if query == "user@example.com");
     }
 
     #[test]
     fn unicode_idna_and_invalid_labels() {
         let p = Policy::default();
-        assert!(matches!(classify("bücher.de", &p), Decision::Navigate { .. }));
-        assert!(matches!(classify("xn--bcher-kva.de", &p), Decision::Navigate { .. }));
-        assert!(matches!(classify("-badlabel.com", &p), Decision::Search { query, unknown_scheme_navigation: None } if query == "-badlabel.com"));
+        assert_matches!(classify("bücher.de", &p), Decision::Navigate { .. });
+        assert_matches!(classify("xn--bcher-kva.de", &p), Decision::Navigate { .. });
+        assert_matches!(classify("-badlabel.com", &p),
+            Decision::Search { query, unknown_scheme_navigation: None } if query == "-badlabel.com");
     }
 
     #[test]
     fn trailing_dot_and_weird_chars() {
         let p = Policy::default();
-        assert!(matches!(classify("example.com.", &p), Decision::Navigate { .. }));
-        assert!(matches!(classify("exa_mple.com", &p), Decision::Search { query, unknown_scheme_navigation: None } if query == "exa_mple.com"));
+        assert_matches!(classify("example.com.", &p), Decision::Navigate { .. });
+        assert_matches!(classify("exa_mple.com", &p),
+            Decision::Search { query, unknown_scheme_navigation: None } if query == "exa_mple.com");
     }
 
     #[test]
     fn ipv4_require_scheme_or_4_octets() {
         let p = Policy::default();
-        assert!(matches!(classify("127.0.0.1", &p), Decision::Navigate { url } if url == "http://127.0.0.1/"));
-        assert!(matches!(classify("http://1.2.7", &p), Decision::Navigate { url } if url == "http://1.2.0.7/"));
-        assert!(matches!(classify("1.2.7", &p), Decision::Search { query, unknown_scheme_navigation: None } if query == "1.2.7"));
-        assert!(matches!(classify("1.2", &p), Decision::Search { query, unknown_scheme_navigation: None } if query == "1.2"));
-        assert!(matches!(classify("127.1/3.4", &p), Decision::Search { query, unknown_scheme_navigation: None } if query == "127.1/3.4"));
+        assert_matches!(classify("127.0.0.1", &p),
+            Decision::Navigate { url } if url == "http://127.0.0.1/");
+        assert_matches!(classify("http://1.2.7", &p),
+            Decision::Navigate { url } if url == "http://1.2.0.7/");
+        assert_matches!(classify("1.2.7", &p),
+            Decision::Search { query, unknown_scheme_navigation: None } if query == "1.2.7");
+        assert_matches!(classify("1.2", &p),
+            Decision::Search { query, unknown_scheme_navigation: None } if query == "1.2");
+        assert_matches!(classify("127.1/3.4", &p),
+            Decision::Search { query, unknown_scheme_navigation: None } if query == "127.1/3.4");
     }
 
     #[test]
     fn macos_specific() {
         let p = Policy::default();
-        assert!(matches!(classify("regular-domain.com/path/to/directory/", &p), Decision::Navigate { url } if url == "http://regular-domain.com/path/to/directory/"));
-        assert!(matches!(classify("regular-domain.com/path/to/directory/", &p), Decision::Navigate { url } if url == "http://regular-domain.com/path/to/directory/"));
-        assert!(matches!(classify("regular-domain.com", &p), Decision::Navigate { url } if url == "http://regular-domain.com/"));
-        assert!(matches!(classify("regular-domain.com/", &p), Decision::Navigate { url } if url == "http://regular-domain.com/"));
-        assert!(matches!(classify("regular-domain.com/filename", &p), Decision::Navigate { url } if url == "http://regular-domain.com/filename"));
-        assert!(matches!(classify("regular-domain.com/filename?a=b&b=c", &p), Decision::Navigate { url } if url == "http://regular-domain.com/filename?a=b&b=c"));
-        assert!(matches!(classify("regular-domain.com/filename/?a=b&b=c", &p), Decision::Navigate { url } if url == "http://regular-domain.com/filename/?a=b&b=c"));
-        assert!(matches!(classify("http://regular-domain.com?a=b&b=c", &p), Decision::Navigate { url } if url == "http://regular-domain.com/?a=b&b=c"));
-        assert!(matches!(classify("http://regular-domain.com/?a=b&b=c", &p), Decision::Navigate { url } if url == "http://regular-domain.com/?a=b&b=c"));
-        assert!(matches!(classify("https://hexfiend.com/file?q=a", &p), Decision::Navigate { url } if url == "https://hexfiend.com/file?q=a"));
-        assert!(matches!(classify("https://hexfiend.com/file/?q=a", &p), Decision::Navigate { url } if url == "https://hexfiend.com/file/?q=a"));
-        assert!(matches!(classify("https://hexfiend.com/?q=a", &p), Decision::Navigate { url } if url == "https://hexfiend.com/?q=a"));
-        assert!(matches!(classify("https://hexfiend.com?q=a", &p), Decision::Navigate { url } if url == "https://hexfiend.com/?q=a"));
-        assert!(matches!(classify("regular-domain.com/path/to/file ", &p), Decision::Navigate { url } if url == "http://regular-domain.com/path/to/file"));
-        assert!(matches!(classify("search string with spaces", &p), Decision::Search { query, unknown_scheme_navigation: None } if query == "search string with spaces"));
-        assert!(matches!(classify("https://duckduckgo.com/?q=search string with spaces&arg 2=val 2", &p), Decision::Navigate { url } if url == "https://duckduckgo.com/?q=search%20string%20with%20spaces&arg%202=val%202"));
-        assert!(matches!(classify("https://duckduckgo.com/?q=search+string+with+spaces", &p), Decision::Navigate { url } if url == "https://duckduckgo.com/?q=search+string+with+spaces"));
-        assert!(matches!(classify("https://screwjankgames.github.io/engine programming/2020/09/24/writing-your.html", &p), Decision::Navigate { url } if url == "https://screwjankgames.github.io/engine%20programming/2020/09/24/writing-your.html"));
-        assert!(matches!(classify("define: foo", &p), Decision::Search { query, unknown_scheme_navigation: None } if query == "define: foo"));
-        assert!(matches!(classify("   http://example.com\n", &p), Decision::Navigate { url } if url == "http://example.com/")); // trailing newline stripped by trim → Navigate
-        assert!(matches!(classify("https://bbc.com\ntest", &p), Decision::Search { .. })); // embedded newline → Search
-        assert!(matches!(classify("bbc.com\ntest", &p), Decision::Search { .. })); // embedded newline, no scheme → Search
-        assert!(matches!(classify("https://bbc.com\rtest", &p), Decision::Search { .. })); // embedded CR → Search
-        assert!(matches!(classify("https://bbc.com\ttest", &p), Decision::Search { .. })); // embedded tab → Search
-        assert!(matches!(classify(" duckduckgo.com", &p), Decision::Navigate { url } if url == "http://duckduckgo.com/"));
-        assert!(matches!(classify(" duck duck go.c ", &p), Decision::Search { query, unknown_scheme_navigation: None } if query == "duck duck go.c"));
-        assert!(matches!(classify("localhost ", &p), Decision::Navigate { url } if url == "http://localhost/"));
-        assert!(matches!(classify("local ", &p), Decision::Search { query, unknown_scheme_navigation: None } if query == "local"));
-        assert!(matches!(classify("test string with spaces", &p), Decision::Search { query, unknown_scheme_navigation: None } if query == "test string with spaces"));
-        assert!(matches!(classify("http://💩.la:8080 ", &p), Decision::Navigate { url } if url == "http://xn--ls8h.la:8080/"));
-        assert!(matches!(classify("http:// 💩.la:8080 ", &p), Decision::Search { query, unknown_scheme_navigation: None } if query == "http:// 💩.la:8080"));
-        assert!(matches!(classify("https://xn--ls8h.la/path/to/resource", &p), Decision::Navigate { url } if url == "https://xn--ls8h.la/path/to/resource"));
-        assert!(matches!(classify("16385-12228.72", &p), Decision::Search { query, unknown_scheme_navigation: None } if query == "16385-12228.72"));
-        assert!(matches!(classify("user@localhost", &p), Decision::Search { query, unknown_scheme_navigation: None } if query == "user@localhost"));
-        assert!(matches!(classify("http://user@domain.com", &p), Decision::Navigate { url } if url == "http://user@domain.com/"));
-        assert!(matches!(classify("http://user: @domain.com", &p), Decision::Navigate { url } if url == "http://user:%20@domain.com/"));
-        assert!(matches!(classify("http://user:,,@domain.com", &p), Decision::Navigate { url } if url == "http://user:,,@domain.com/"));
-        assert!(matches!(classify("http://user:pass@domain.com", &p), Decision::Navigate { url } if url == "http://user:pass@domain.com/"));
-        assert!(matches!(classify("http://user name:pass word@domain.com/folder name/file name/", &p), Decision::Navigate { url } if url == "http://user%20name:pass%20word@domain.com/folder%20name/file%20name/"));
-        assert!(matches!(classify("1+(3+4*2)", &p), Decision::Search { query, unknown_scheme_navigation: None } if query == "1+(3+4*2)"));
-        assert!(matches!(classify("localdomain", &p), Decision::Search { query, unknown_scheme_navigation: None } if query == "localdomain"));
+        assert_matches!(classify("regular-domain.com/path/to/directory/", &p),
+            Decision::Navigate { url } if url == "http://regular-domain.com/path/to/directory/");
+        assert_matches!(classify("regular-domain.com/path/to/directory/", &p),
+                Decision::Navigate { url } if url == "http://regular-domain.com/path/to/directory/");
+        assert_matches!(classify("regular-domain.com", &p),
+            Decision::Navigate { url } if url == "http://regular-domain.com/");
+        assert_matches!(classify("regular-domain.com/", &p),
+            Decision::Navigate { url } if url == "http://regular-domain.com/");
+        assert_matches!(classify("regular-domain.com/filename", &p),
+            Decision::Navigate { url } if url == "http://regular-domain.com/filename");
+        assert_matches!(classify("regular-domain.com/filename?a=b&b=c", &p),
+            Decision::Navigate { url } if url == "http://regular-domain.com/filename?a=b&b=c");
+        assert_matches!(classify("regular-domain.com/filename/?a=b&b=c", &p),
+            Decision::Navigate { url } if url == "http://regular-domain.com/filename/?a=b&b=c");
+        assert_matches!(classify("http://regular-domain.com?a=b&b=c", &p),
+            Decision::Navigate { url } if url == "http://regular-domain.com/?a=b&b=c");
+        assert_matches!(classify("http://regular-domain.com/?a=b&b=c", &p),
+            Decision::Navigate { url } if url == "http://regular-domain.com/?a=b&b=c");
+        assert_matches!(classify("https://hexfiend.com/file?q=a", &p),
+            Decision::Navigate { url } if url == "https://hexfiend.com/file?q=a");
+        assert_matches!(classify("https://hexfiend.com/file/?q=a", &p),
+            Decision::Navigate { url } if url == "https://hexfiend.com/file/?q=a");
+        assert_matches!(classify("https://hexfiend.com/?q=a", &p),
+            Decision::Navigate { url } if url == "https://hexfiend.com/?q=a");
+        assert_matches!(classify("https://hexfiend.com?q=a", &p),
+            Decision::Navigate { url } if url == "https://hexfiend.com/?q=a");
+        assert_matches!(classify("regular-domain.com/path/to/file ", &p),
+            Decision::Navigate { url } if url == "http://regular-domain.com/path/to/file");
+        assert_matches!(classify("search string with spaces", &p),
+            Decision::Search { query, unknown_scheme_navigation: None }
+            if query == "search string with spaces");
+        assert_matches!(classify("https://duckduckgo.com/?q=search string with spaces&arg 2=val 2", &p),
+            Decision::Navigate { url }
+            if url == "https://duckduckgo.com/?q=search%20string%20with%20spaces&arg%202=val%202");
+        assert_matches!(classify("https://duckduckgo.com/?q=search+string+with+spaces", &p),
+            Decision::Navigate { url } if url == "https://duckduckgo.com/?q=search+string+with+spaces");
+        assert_matches!(classify("https://screwjankgames.github.io/engine programming/2020/09/24/writing-your.html", &p),
+            Decision::Navigate { url } if url == "https://screwjankgames.github.io/engine%20programming/2020/09/24/writing-your.html");
+        assert_matches!(classify("define: foo", &p), Decision::Search { query, unknown_scheme_navigation: None } if query == "define: foo");
+        assert_matches!(classify("   http://example.com\n", &p),
+            Decision::Navigate { url } if url == "http://example.com/"); // trailing newline stripped by trim => Navigate
+        assert_matches!(
+            classify("https://bbc.com\ntest", &p),
+            Decision::Search { .. }
+        ); // embedded newline => Search
+        assert_matches!(classify("bbc.com\ntest", &p), Decision::Search { .. }); // embedded newline, no scheme => Search
+        assert_matches!(
+            classify("https://bbc.com\rtest", &p),
+            Decision::Search { .. }
+        ); // embedded CR => Search
+        assert_matches!(
+            classify("https://bbc.com\ttest", &p),
+            Decision::Search { .. }
+        ); // embedded tab => Search
+        assert_matches!(classify(" duckduckgo.com", &p),
+            Decision::Navigate { url } if url == "http://duckduckgo.com/");
+        assert_matches!(classify(" duck duck go.c ", &p),
+            Decision::Search { query, unknown_scheme_navigation: None } if query == "duck duck go.c");
+        assert_matches!(classify("localhost ", &p),
+            Decision::Navigate { url } if url == "http://localhost/");
+        assert_matches!(classify("local ", &p),
+            Decision::Search { query, unknown_scheme_navigation: None } if query == "local");
+        assert_matches!(classify("test string with spaces", &p),
+            Decision::Search { query, unknown_scheme_navigation: None } if query == "test string with spaces");
+        assert_matches!(classify("http://💩.la:8080 ", &p),
+            Decision::Navigate { url } if url == "http://xn--ls8h.la:8080/");
+        assert_matches!(classify("http:// 💩.la:8080 ", &p),
+            Decision::Search { query, unknown_scheme_navigation: None } if query == "http:// 💩.la:8080");
+        assert_matches!(classify("https://xn--ls8h.la/path/to/resource", &p),
+            Decision::Navigate { url } if url == "https://xn--ls8h.la/path/to/resource");
+        assert_matches!(classify("16385-12228.72", &p),
+            Decision::Search { query, unknown_scheme_navigation: None } if query == "16385-12228.72");
+        assert_matches!(classify("user@localhost", &p),
+            Decision::Search { query, unknown_scheme_navigation: None } if query == "user@localhost");
+        assert_matches!(classify("http://user@domain.com", &p),
+            Decision::Navigate { url } if url == "http://user@domain.com/");
+        assert_matches!(classify("http://user: @domain.com", &p),
+            Decision::Navigate { url } if url == "http://user:%20@domain.com/");
+        assert_matches!(classify("http://user:,,@domain.com", &p),
+            Decision::Navigate { url } if url == "http://user:,,@domain.com/");
+        assert_matches!(classify("http://user:pass@domain.com", &p),
+            Decision::Navigate { url } if url == "http://user:pass@domain.com/");
+        assert_matches!(classify("http://user name:pass word@domain.com/folder name/file name/", &p),
+            Decision::Navigate { url } if url == "http://user%20name:pass%20word@domain.com/folder%20name/file%20name/");
+        assert_matches!(classify("1+(3+4*2)", &p),
+            Decision::Search { query, unknown_scheme_navigation: None } if query == "1+(3+4*2)");
+        assert_matches!(classify("localdomain", &p),
+            Decision::Search { query, unknown_scheme_navigation: None } if query == "localdomain");
         // different from macOS - test:// has unknown schema
-        assert!(matches!(classify("test://hello/", &p), Decision::Search { query, unknown_scheme_navigation: Some(ref url) } if query == "test://hello/" && url == "test://hello/"));
+        assert_matches!(
+            classify("test://hello/", &p),
+            Decision::Search { query, unknown_scheme_navigation: Some(ref url) } if query == "test://hello/" && url == "test://hello/"
+        );
     }
 
     #[test]
     fn windows_specific() {
         let p = Policy::default();
-        assert!(matches!(classify("apple.com/mac/", &p), Decision::Navigate { url } if url == "http://apple.com/mac/"));
-        assert!(matches!(classify("duckduckgo.com", &p), Decision::Navigate { url } if url == "http://duckduckgo.com/"));
-        assert!(matches!(classify("duckduckgo", &p), Decision::Search { query, unknown_scheme_navigation: None } if query == "duckduckgo"));
-        assert!(matches!(classify("www.duckduckgo.com", &p), Decision::Navigate { url } if url == "http://www.duckduckgo.com/"));
-        assert!(matches!(classify("http://www.duckduckgo.com", &p), Decision::Navigate { url } if url == "http://www.duckduckgo.com/"));
-        assert!(matches!(classify("https://www.duckduckgo.com", &p), Decision::Navigate { url } if url == "https://www.duckduckgo.com/"));
-        assert!(matches!(classify("stuff.stor", &p), Decision::Search { query, unknown_scheme_navigation: None } if query == "stuff.stor"));
-        assert!(matches!(classify("https://stuff.or", &p), Decision::Navigate { url } if url == "https://stuff.or/"));
-        assert!(matches!(classify("stuff.org", &p), Decision::Navigate { url } if url == "http://stuff.org/"));
-        assert!(matches!(classify("windows.applicationmodel.store.dll", &p), Decision::Search { query, unknown_scheme_navigation: None } if query == "windows.applicationmodel.store.dll"));
-        assert!(matches!(classify("user:pass@domain.com", &p), Decision::Navigate { url } if url == "http://user:pass@domain.com/"));
-        assert!(matches!(classify("user: @domain.com", &p), Decision::Search { query, unknown_scheme_navigation: None } if query == "user: @domain.com"));
-        assert!(matches!(classify("user:,,@domain.com", &p), Decision::Navigate { url } if url == "http://user:,,@domain.com/"));
-        assert!(matches!(classify("user:::@domain.com", &p), Decision::Navigate { url } if url == "http://user:%3A%3A@domain.com/"));
-        assert!(matches!(classify("https://user@domain.com", &p), Decision::Navigate { url } if url == "https://user@domain.com/"));
-        assert!(matches!(classify("https://user:pass@domain.com", &p), Decision::Navigate { url } if url == "https://user:pass@domain.com/"));
-        assert!(matches!(classify("https://user: @domain.com", &p), Decision::Navigate { url } if url == "https://user:%20@domain.com/"));
-        assert!(matches!(classify("https://user:,,@domain.com", &p), Decision::Navigate { url } if url == "https://user:,,@domain.com/"));
-        assert!(matches!(classify("https://user:::@domain.com", &p), Decision::Navigate { url } if url == "https://user:%3A%3A@domain.com/"));
+        assert_matches!(classify("apple.com/mac/", &p),
+            Decision::Navigate { url } if url == "http://apple.com/mac/");
+        assert_matches!(classify("duckduckgo.com", &p),
+            Decision::Navigate { url } if url == "http://duckduckgo.com/");
+        assert_matches!(classify("duckduckgo", &p),
+            Decision::Search { query, unknown_scheme_navigation: None } if query == "duckduckgo");
+        assert_matches!(classify("www.duckduckgo.com", &p),
+            Decision::Navigate { url } if url == "http://www.duckduckgo.com/");
+        assert_matches!(classify("http://www.duckduckgo.com", &p),
+            Decision::Navigate { url } if url == "http://www.duckduckgo.com/");
+        assert_matches!(classify("https://www.duckduckgo.com", &p),
+            Decision::Navigate { url } if url == "https://www.duckduckgo.com/");
+        assert_matches!(classify("stuff.stor", &p),
+            Decision::Search { query, unknown_scheme_navigation: None } if query == "stuff.stor");
+        assert_matches!(classify("https://stuff.or", &p),
+            Decision::Navigate { url } if url == "https://stuff.or/");
+        assert_matches!(classify("stuff.org", &p),
+            Decision::Navigate { url } if url == "http://stuff.org/");
+        assert_matches!(classify("windows.applicationmodel.store.dll", &p),
+            Decision::Search { query, unknown_scheme_navigation: None } if query == "windows.applicationmodel.store.dll");
+        assert_matches!(classify("user:pass@domain.com", &p),
+            Decision::Navigate { url } if url == "http://user:pass@domain.com/");
+        assert_matches!(classify("user: @domain.com", &p),
+            Decision::Search { query, unknown_scheme_navigation: None } if query == "user: @domain.com");
+        assert_matches!(classify("user:,,@domain.com", &p),
+            Decision::Navigate { url } if url == "http://user:,,@domain.com/");
+        assert_matches!(classify("user:::@domain.com", &p),
+            Decision::Navigate { url } if url == "http://user:%3A%3A@domain.com/");
+        assert_matches!(classify("https://user@domain.com", &p),
+            Decision::Navigate { url } if url == "https://user@domain.com/");
+        assert_matches!(classify("https://user:pass@domain.com", &p),
+            Decision::Navigate { url } if url == "https://user:pass@domain.com/");
+        assert_matches!(classify("https://user: @domain.com", &p),
+            Decision::Navigate { url } if url == "https://user:%20@domain.com/");
+        assert_matches!(classify("https://user:,,@domain.com", &p),
+            Decision::Navigate { url } if url == "https://user:,,@domain.com/");
+        assert_matches!(classify("https://user:::@domain.com", &p),
+            Decision::Navigate { url } if url == "https://user:%3A%3A@domain.com/");
 
         // different from Windows
-        assert!(matches!(classify("user@domain.com", &p), Decision::Search { query, unknown_scheme_navigation: None } if query == "user@domain.com"));
+        assert_matches!(classify("user@domain.com", &p),
+            Decision::Search { query, unknown_scheme_navigation: None } if query == "user@domain.com");
     }
 
     // ---------------------------
@@ -896,13 +1016,21 @@ mod tests {
     fn psl_wildcard_kawasaki_jp() {
         // PSL has a wildcard for *.kawasaki.jp (municipalities in Japan),
         // so domains like foo.kawasaki.jp should be recognized as having a known suffix.
-        let mut p = Policy::default();
-        p.allow_intranet_single_label = false;
+        let mut p = Policy {
+            allow_intranet_single_label: false,
+            ..Default::default()
+        };
 
-        assert!(matches!(classify("foo.kawasaki.jp", &p), Decision::Search { query, unknown_scheme_navigation: None } if query == "foo.kawasaki.jp"),
-            "expected wildcard under *.kawasaki.jp to navigate");
-        assert!(matches!(classify("bar.baz.kawasaki.jp", &p), Decision::Navigate { .. }),
-            "deeper labels under *.kawasaki.jp should still navigate");
+        assert_matches!(
+            classify("foo.kawasaki.jp", &p),
+            Decision::Search { query, unknown_scheme_navigation: None } if query == "foo.kawasaki.jp",
+            "expected wildcard under *.kawasaki.jp to navigate"
+        );
+        assert_matches!(
+            classify("bar.baz.kawasaki.jp", &p),
+            Decision::Navigate { .. },
+            "deeper labels under *.kawasaki.jp should still navigate"
+        );
     }
 
     #[cfg(feature = "real-psl")]
@@ -913,13 +1041,21 @@ mod tests {
         // In practice:
         // - "city.kawasaki.jp" is recognized as a public suffix (Navigate when typed)
         // - "foo.city.kawasaki.jp" is a registrable domain (Navigate as well)
-        let mut p = Policy::default();
-        p.allow_intranet_single_label = false;
+        let mut p = Policy {
+            allow_intranet_single_label: false,
+            ..Default::default()
+        };
 
-        assert!(matches!(classify("city.kawasaki.jp", &p), Decision::Navigate { .. }),
-            "exception rule makes city.kawasaki.jp a known suffix");
-        assert!(matches!(classify("foo.city.kawasaki.jp", &p), Decision::Navigate { .. }),
-            "labels under the exception should also navigate");
+        assert_matches!(
+            classify("city.kawasaki.jp", &p),
+            Decision::Navigate { .. },
+            "exception rule makes city.kawasaki.jp a known suffix"
+        );
+        assert_matches!(
+            classify("foo.city.kawasaki.jp", &p),
+            Decision::Navigate { .. },
+            "labels under the exception should also navigate"
+        );
     }
 
     #[cfg(feature = "real-psl")]
@@ -927,14 +1063,19 @@ mod tests {
     fn psl_private_suffix_still_respects_policy() {
         // Sanity: PRIVATE suffix like github.io should navigate when allowed,
         // and flip to Search when PRIVATE is disabled.
-        let mut p = Policy::default();
-        p.allow_intranet_single_label = false;
+        let mut p = Policy {
+            allow_intranet_single_label: false,
+            ..Default::default()
+        };
 
-        assert!(matches!(classify("foo.github.io", &p), Decision::Navigate { .. }));
+        assert_matches!(classify("foo.github.io", &p), Decision::Navigate { .. });
 
         p.allow_private_suffix = false;
-        assert!(matches!(classify("foo.github.io", &p), Decision::Search { query, unknown_scheme_navigation: None } if query == "foo.github.io"),
-            "when private suffixes are disallowed, treat as Search");
+        assert_matches!(
+            classify("foo.github.io", &p),
+            Decision::Search { query, unknown_scheme_navigation: None } if query == "foo.github.io",
+            "when private suffixes are disallowed, treat as Search"
+        );
     }
 
     #[cfg(feature = "real-psl")]
@@ -943,72 +1084,81 @@ mod tests {
         // RFC 6761 reserves some domains for internal use
         // These should be treated as known suffixes
         let p = Policy::default();
-        assert!(matches!(classify("foo.test", &p), Decision::Navigate { .. }));
-        assert!(matches!(classify("foo.example", &p), Decision::Navigate { .. }));
-        assert!(matches!(classify("foo.local", &p), Decision::Navigate { .. }));
-        assert!(matches!(classify("foo.localhost", &p), Decision::Navigate { .. }));
+        assert_matches!(classify("foo.test", &p), Decision::Navigate { .. });
+        assert_matches!(classify("foo.example", &p), Decision::Navigate { .. });
+        assert_matches!(classify("foo.local", &p), Decision::Navigate { .. });
+        assert_matches!(classify("foo.localhost", &p), Decision::Navigate { .. });
     }
 
     #[test]
     fn telephone_number_is_search() {
         let p = policy_default_inet();
         // tel: URLs have unknown_scheme_navigation since tel is a valid but not-allowed scheme
-        assert!(matches!(
+        assert_matches!(
             classify("tel:+123456789", &p),
             Decision::Search { query, unknown_scheme_navigation: Some(ref url) } if query == "tel:+123456789" && url == "tel:+123456789"
-        ));
-        assert!(matches!(
+        );
+        assert_matches!(
             classify("tel:+4123423465", &p),
             Decision::Search { query, unknown_scheme_navigation: Some(ref url) } if query == "tel:+4123423465" && url == "tel:+4123423465"
-        ));
+        );
         // Plain numbers don't have a scheme, so no unknown_scheme_navigation
-        assert!(matches!(
+        assert_matches!(
             classify("912345678", &p),
             Decision::Search { query, unknown_scheme_navigation: None } if query == "912345678"
-        ));
-        assert!(matches!(
+        );
+        assert_matches!(
             classify("+351 912 345 678", &p),
             Decision::Search { query, unknown_scheme_navigation: None } if query == "+351 912 345 678"
-        ));
+        );
     }
 
     #[test]
     fn unknown_scheme_navigation() {
         let p = policy_default_inet();
 
-        assert!(matches!(
+        assert_matches!(
             classify("tel:+123456789", &p),
             Decision::Search { query, unknown_scheme_navigation: Some(ref url) } if query == "tel:+123456789" && url == "tel:+123456789"
-        ));
+        );
 
-        assert!(matches!(
+        assert_matches!(
             classify("myapp://open/page", &p),
             Decision::Search { query, unknown_scheme_navigation: Some(ref url) } if query == "myapp://open/page" && url == "myapp://open/page"
-        ));
+        );
 
-        assert!(matches!(
+        assert_matches!(
             classify("spotify:track:123", &p),
             Decision::Search { query, unknown_scheme_navigation: Some(ref url) } if query == "spotify:track:123" && url == "spotify:track:123"
-        ));
+        );
 
-        assert!(matches!(
+        assert_matches!(
             classify("hello world", &p),
             Decision::Search { query, unknown_scheme_navigation: None } if query == "hello world"
-        ));
+        );
 
-        assert!(matches!(
+        assert_matches!(
             classify("something.orother", &p),
             Decision::Search { query, unknown_scheme_navigation: None } if query == "something.orother"
-        ));
+        );
     }
 
     #[cfg(feature = "real-psl")]
     #[test]
     fn mailto_urls_become_search() {
         let p = Policy::default();
-        assert!(matches!(classify("mailto:test@google.com", &p), Decision::Navigate { .. }));
-        assert!(matches!(classify("mailto:test@yahoo.com", &p), Decision::Navigate { .. }));
-        assert!(matches!(classify("mailto:test@hotmail.com", &p), Decision::Navigate { .. }));
+        assert_matches!(
+            classify("mailto:test@google.com", &p),
+            Decision::Navigate { .. }
+        );
+        assert_matches!(
+            classify("mailto:test@yahoo.com", &p),
+            Decision::Navigate { .. }
+        );
+        assert_matches!(
+            classify("mailto:test@hotmail.com", &p),
+            Decision::Navigate { .. }
+        );
     }
 
     #[test]
@@ -1066,10 +1216,17 @@ mod tests {
         for (input, expected) in unbracketed_expected {
             match classify(input, &p) {
                 Decision::Navigate { ref url } => {
-                    assert_eq!(url, expected, "Expected '{}' for input '{}', got '{}'", expected, input, url);
+                    assert_eq!(
+                        url, expected,
+                        "Expected '{}' for input '{}', got '{}'",
+                        expected, input, url
+                    );
                 }
                 Decision::Search { ref query, .. } => {
-                    panic!("Expected Navigate for '{}', got Search with query '{}'", input, query);
+                    panic!(
+                        "Expected Navigate for '{}', got Search with query '{}'",
+                        input, query
+                    );
                 }
             }
         }
@@ -1099,10 +1256,17 @@ mod tests {
         for (input, expected) in zone_cases {
             match classify(input, &p) {
                 Decision::Navigate { ref url } => {
-                    assert_eq!(url, expected, "Expected '{}' for input '{}', got '{}'", expected, input, url);
+                    assert_eq!(
+                        url, expected,
+                        "Expected '{}' for input '{}', got '{}'",
+                        expected, input, url
+                    );
                 }
                 Decision::Search { ref query, .. } => {
-                    panic!("Expected Navigate for '{}', got Search with query '{}'", input, query);
+                    panic!(
+                        "Expected Navigate for '{}', got Search with query '{}'",
+                        input, query
+                    );
                 }
             }
         }
@@ -1111,10 +1275,17 @@ mod tests {
         let cidr_expected = "http://[2001:db8:abcd:0012::0]/64";
         match classify(cidr_like, &p) {
             Decision::Navigate { ref url } => {
-                assert_eq!(url, cidr_expected, "Expected '{}' for input '{}', got '{}'", cidr_expected, cidr_like, url);
+                assert_eq!(
+                    url, cidr_expected,
+                    "Expected '{}' for input '{}', got '{}'",
+                    cidr_expected, cidr_like, url
+                );
             }
             Decision::Search { ref query, .. } => {
-                panic!("Expected Navigate for '{}', got Search with query '{}'", cidr_like, query);
+                panic!(
+                    "Expected Navigate for '{}', got Search with query '{}'",
+                    cidr_like, query
+                );
             }
         }
 
@@ -1135,43 +1306,69 @@ mod tests {
             ("/etc/test.html", "file:///etc/test.html"),
             ("/etc/test", "file:///etc/test"),
             ("/", "file:///"),
-            
             // Paths with special characters (no spaces)
-            ("/path/to/file?query=value", "file:///path/to/file%3Fquery=value"),
+            (
+                "/path/to/file?query=value",
+                "file:///path/to/file%3Fquery=value",
+            ),
             ("/path/to/file#anchor", "file:///path/to/file%23anchor"),
-            
             // Paths with Unicode characters
-            ("/Users/用户/文件.html", "file:///Users/%E7%94%A8%E6%88%B7/%E6%96%87%E4%BB%B6.html"),
-            ("/путь/к/файлу.txt", "file:///%D0%BF%D1%83%D1%82%D1%8C/%D0%BA/%D1%84%D0%B0%D0%B9%D0%BB%D1%83.txt"),
-            
+            (
+                "/Users/用户/文件.html",
+                "file:///Users/%E7%94%A8%E6%88%B7/%E6%96%87%E4%BB%B6.html",
+            ),
+            (
+                "/путь/к/файлу.txt",
+                "file:///%D0%BF%D1%83%D1%82%D1%8C/%D0%BA/%D1%84%D0%B0%D0%B9%D0%BB%D1%83.txt",
+            ),
             // Paths with dots
-            ("/path/../other/file.html", "file:///path/../other/file.html"),
+            (
+                "/path/../other/file.html",
+                "file:///path/../other/file.html",
+            ),
             ("/./file.html", "file:///file.html"),
-            
             // Paths with encoded characters (treated as literals, not decoded)
-            ("/path%20with%20spaces.html", "file:///path%2520with%2520spaces.html"), 
-            
+            (
+                "/path%20with%20spaces.html",
+                "file:///path%2520with%2520spaces.html",
+            ),
             // Paths with spaces
-            ("/path with spaces.html", "file:///path%20with%20spaces.html"),
-            ("/path with spaces/file.html", "file:///path%20with%20spaces/file.html"),
+            (
+                "/path with spaces.html",
+                "file:///path%20with%20spaces.html",
+            ),
+            (
+                "/path with spaces/file.html",
+                "file:///path%20with%20spaces/file.html",
+            ),
         ];
 
         for (input, expected) in &test_cases {
-            let mut p = Policy::default();
-            p.allow_file_paths = false;
-            
+            let mut p = Policy {
+                allow_file_paths: false,
+                ..Default::default()
+            };
+
             let result = classify(input, &p);
-            assert!(matches!(result, Decision::Search { .. }),
-                "Expected Search for '{}' when allow_file_paths=false, got {:?}", input, result);
-            
+            assert_matches!(
+                result,
+                Decision::Search { .. },
+                "Expected Search for '{}' when allow_file_paths=false, got {:?}",
+                input,
+                result
+            );
+
             p.allow_file_paths = true;
-            
+
             let result = classify(input, &p);
             match result {
                 Decision::Navigate { ref url } => {
-                    assert_eq!(url, expected,
-                        "Expected '{}' for input '{}', got '{}'", expected, input, url);
-                },
+                    assert_eq!(
+                        url, expected,
+                        "Expected '{}' for input '{}', got '{}'",
+                        expected, input, url
+                    );
+                }
                 Decision::Search { ref query, .. } => {
                     panic!("Expected Navigate for '{}' when allow_file_paths=true, got Search with query '{}'", input, query);
                 }
@@ -1186,64 +1383,82 @@ mod tests {
             // Basic drive paths with backslashes
             (r"C:\foo\bar.html", "file:///C:/foo/bar.html"),
             (r"c:\foo\bar.html", "file:///C:/foo/bar.html"),
-            
             // Drive paths with forward slashes
             ("C:/foo/bar.html", "file:///C:/foo/bar.html"),
             ("c:/foo/bar.html", "file:///C:/foo/bar.html"),
-            
             // UNC paths (only with backslashes, forward slashes are scheme-relative URLs)
             (r"\\foo\bar.html", "file://foo/bar.html"),
             (r"\\server\share\file.txt", "file://server/share/file.txt"),
-            
             // Paths with special characters
             (r"C:\path\file?query=1", "file:///C:/path/file%3Fquery=1"),
             (r"C:\path\file#anchor", "file:///C:/path/file%23anchor"),
-            
             // Paths with Unicode characters
-            (r"C:\Users\用户\文件.html", "file:///C:/Users/%E7%94%A8%E6%88%B7/%E6%96%87%E4%BB%B6.html"),
-            (r"C:\путь\к\файлу.txt", "file:///C:/%D0%BF%D1%83%D1%82%D1%8C/%D0%BA/%D1%84%D0%B0%D0%B9%D0%BB%D1%83.txt"),
-            
+            (
+                r"C:\Users\用户\文件.html",
+                "file:///C:/Users/%E7%94%A8%E6%88%B7/%E6%96%87%E4%BB%B6.html",
+            ),
+            (
+                r"C:\путь\к\файлу.txt",
+                "file:///C:/%D0%BF%D1%83%D1%82%D1%8C/%D0%BA/%D1%84%D0%B0%D0%B9%D0%BB%D1%83.txt",
+            ),
             // Different drive letters
             (r"D:\data\file.txt", "file:///D:/data/file.txt"),
             (r"E:\backup\archive.zip", "file:///E:/backup/archive.zip"),
             (r"Z:\network\share.doc", "file:///Z:/network/share.doc"),
-            
             // Root drive path (exactly 3 characters - edge case)
             (r"C:\", "file:///C:/"),
             (r"c:\", "file:///C:/"),
-            
             // Mixed slashes
             (r"C:\foo/bar\baz.html", "file:///C:/foo/bar/baz.html"),
             (r"\\server/share\file.html", "file://server/share/file.html"),
-            
             // Paths with dots
-            (r"C:\path\..\other\file.html", "file:///C:/path/../other/file.html"),
+            (
+                r"C:\path\..\other\file.html",
+                "file:///C:/path/../other/file.html",
+            ),
             (r"C:\.\file.html", "file:///C:/file.html"),
-            
             // Paths with encoded characters (treated as literals)
-            (r"C:\path%20with%20spaces.html", "file:///C:/path%2520with%2520spaces.html"),
-
+            (
+                r"C:\path%20with%20spaces.html",
+                "file:///C:/path%2520with%2520spaces.html",
+            ),
             // Paths with spaces
-            (r"C:\path with spaces.html", "file:///C:/path%20with%20spaces.html"),
-            (r"C:\path with spaces\file.html", "file:///C:/path%20with%20spaces/file.html")
+            (
+                r"C:\path with spaces.html",
+                "file:///C:/path%20with%20spaces.html",
+            ),
+            (
+                r"C:\path with spaces\file.html",
+                "file:///C:/path%20with%20spaces/file.html",
+            ),
         ];
 
         for (input, expected) in &test_cases {
-            let mut p = Policy::default();
-            p.allow_file_paths = false;
-            
+            let mut p = Policy {
+                allow_file_paths: false,
+                ..Default::default()
+            };
+
             let result = classify(input, &p);
-            assert!(matches!(result, Decision::Search { .. }),
-                "Expected Search for '{}' when allow_file_paths=false, got {:?}", input, result);
-            
+            assert_matches!(
+                result,
+                Decision::Search { .. },
+                "Expected Search for '{}' when allow_file_paths=false, got {:?}",
+                input,
+                result
+            );
+
             p.allow_file_paths = true;
-            
+
             let result = classify(input, &p);
             match result {
                 Decision::Navigate { ref url } => {
-                    assert_eq!(url, expected,
-                        "Expected '{}' for input '{}', got '{}'", expected, input, url);
-                },
+                    assert_eq!(
+                        url, expected,
+                        "Expected '{}' for input '{}', got '{}'",
+                        expected, input, url
+                    );
+                }
                 Decision::Search { ref query, .. } => {
                     panic!("Expected Navigate for '{}' when allow_file_paths=true, got Search with query '{}'", input, query);
                 }
@@ -1254,9 +1469,9 @@ mod tests {
     #[test]
     fn known_bare_domains_are_navigate() {
         let p = policy_default_inet();
-        assert!(matches!(classify("blogspot.com", &p),Decision::Navigate { .. }));
-        assert!(matches!(classify("github.io", &p),Decision::Navigate { .. }));
-        assert!(matches!(classify("gov.cz", &p),Decision::Navigate { .. }));
+        assert_matches!(classify("blogspot.com", &p), Decision::Navigate { .. });
+        assert_matches!(classify("github.io", &p), Decision::Navigate { .. });
+        assert_matches!(classify("gov.cz", &p), Decision::Navigate { .. });
     }
 
     #[test]
@@ -1266,8 +1481,9 @@ mod tests {
         for host in crate::generated_suffix_allowlist::ALWAYS_NAVIGATE_SUFFIX_ROOTS {
             let d = classify(host, &p);
 
-            assert!(
-                matches!(d, Decision::Navigate { .. }),
+            assert_matches!(
+                d,
+                Decision::Navigate { .. },
                 "expected Navigate for allowlisted suffix root '{}', got {:?}",
                 host,
                 d,
